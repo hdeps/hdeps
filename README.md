@@ -19,8 +19,9 @@ $ hdeps --have urllib3==1.999 requests
 
 # Version Compat
 
-Usage of this library should work back to 3.7, but development (and mypy
-compatibility) only on 3.10-3.12.  Linting requires 3.12 for full fidelity.
+This library works only on 3.10-3.12, and linting requires 3.12 for full
+fidelity.  I do not yet know how well it works on 3.13 because I haven't gotten
+pydantic-core to compile there and they don't provide a wheel.
 
 # License
 
