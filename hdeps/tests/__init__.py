@@ -1,5 +1,7 @@
-# from .foo import FooTest
+from .cache import SimpleCacheTest
+from .markers import EnvironmentMarkersTest
 
 __all__ = [
-    # "FooTest",
+    "EnvironmentMarkersTest",
+    "SimpleCacheTest",
 ]

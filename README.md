@@ -1,5 +1,21 @@
 # hdeps
 
+Simple dependency not-a-solver lets you debug where backtracking would happen,
+or figure out what would change on a platform that's not the same as you're
+running right now.
+
+This code was originally part of [honesty](https://pypi.org/project/honesty/)
+but is easier to iterate on with pypi-simple as its source.
+
+```sh
+$ hdeps requests
+...
+$ hdeps --install-order requests
+...
+$ hdeps --have urllib3==1.999 requests
+...
+```
+
 
 # Version Compat
 
