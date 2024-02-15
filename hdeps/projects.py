@@ -87,6 +87,7 @@ class ProjectVersion:
                         f = SeekableHttpFile(
                             pkg.url,
                             get_range=partial(get_range_requests, session=session),
+                            check_etag=False,
                         )
                         zf = ZipFile(f)  # type: ignore[arg-type]
                         # These two lines come from warehouse itself
