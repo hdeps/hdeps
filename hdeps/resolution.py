@@ -235,7 +235,11 @@ class Walker:
                     # conflicting decision
                     color = "magenta"
                 else:
-                    color = "green"
+                    cur = self.current_version_callback(x.target.project)
+                    if cur and Version(cur) == x.target.version:
+                        color = "cyan"
+                    else:
+                        color = "green"
                     # color = "red" if not x.target.has_sdist else "green"
                 seen.add(key)
                 click.echo(

@@ -2,19 +2,20 @@ import logging
 import threading
 import time
 from pathlib import Path
-from typing import IO, List, Optional
+from typing import Dict, IO, List, Optional
 
 import click
 import keke
 
 from indexurl import get_index_url
 from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
 from pypi_simple import ACCEPT_JSON_PREFERRED, PyPISimple
 
 from .markers import EnvironmentMarkers
-
 from .resolution import Walker
 from .session import get_cached_retry_session, get_retry_session
+from .types import CanonicalName
 
 
 def _stats_thread() -> None:
@@ -70,6 +71,7 @@ def _stats_thread() -> None:
     is_flag=True,
     help="Output a theoretical install order instead of a tree",
 )
+@click.option("--have", help="pkg==ver to assume already installed", multiple=True)
 @click.option("-r", "--requirements-file", multiple=True)
 @click.argument(
     "deps",
@@ -81,6 +83,7 @@ def main(
     stats: bool,
     verbose: bool,
     parallelism: int,
+    have: List[str],
     requirements_file: List[str],
     deps: List[str],
     platform: Optional[str],
@@ -105,6 +108,11 @@ def main(
     cached_session = get_cached_retry_session()
     uncached_session = get_retry_session()
 
+    have_versions: Dict[CanonicalName, str] = {}
+    for h in have:
+        k, _, v = h.partition("==")
+        have_versions[CanonicalName(canonicalize_name(k))] = v
+
     walker = Walker(
         parallelism,
         env_markers=EnvironmentMarkers.from_args(
@@ -114,6 +122,7 @@ def main(
             get_index_url(), session=cached_session, accept=ACCEPT_JSON_PREFERRED
         ),
         uncached_session=uncached_session,
+        current_version_callback=have_versions.get,
     )
 
     for dep in deps:
