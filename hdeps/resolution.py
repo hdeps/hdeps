@@ -5,6 +5,8 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import Dict, Optional, Set, Tuple
 
+import click
+
 from keke import kev, ktrace
 
 from packaging.requirements import Requirement
@@ -56,6 +58,7 @@ class Walker:
 
         self.queue: deque[Tuple[Choice, CanonicalName, Requirement, str]] = deque()
         self.current_version_callback = current_version_callback
+        self.known_conflicts: Set[CanonicalName] = set()
 
     def feed_file(self, req_file: Path) -> None:
         for req in _iter_simple_requirements(req_file):
@@ -122,11 +125,12 @@ class Walker:
             with kev("project result", project_name=name):
                 project = fut.result()
 
+            cur = chosen.get(name)
             version = find_best_compatible_version(
                 project,
                 req,
                 self.env_markers,
-                chosen.get(name),
+                cur,
                 self.current_version_callback,
             )
             choice = Choice(name, version)
@@ -134,6 +138,11 @@ class Walker:
                 choice, specifier=req.specifier, markers=req.marker, note=source
             )
             parent.deps.append(edge)
+
+            if cur and cur != version:
+                LOG.warning("Multiple versions for %s: %s and %s", name, cur, version)
+                self.known_conflicts.add(name)
+            chosen[name] = version
 
             if t := project.versions.get(version):
                 if t not in self.memo_version_metadata:
@@ -161,9 +170,6 @@ class Walker:
                     else:
                         LOG.info("    omit")
 
-    def print(self, prefix: str = "") -> None:
-        pass
-
     def print_flat(
         self,
         choice: Optional[Choice] = None,
@@ -187,3 +193,61 @@ class Walker:
             dep_extras = f"[{', '.join(x.target.extras)}]" if x.target.extras else ""
             if not flag:
                 print(f"{x.target.project}{dep_extras}=={x.target.version}")
+
+    def print_tree(
+        self,
+        choice: Optional[Choice] = None,
+        seen: Optional[
+            Set[Tuple[CanonicalName, LooseVersion, Optional[Tuple[str, ...]]]]
+        ] = None,
+        known_conflicts: Set[CanonicalName] = set(),
+        depth: int = 0,
+    ) -> None:
+        prefix = ". " * depth
+        if choice is None:
+            choice = self.root
+            seen = set()
+            known_conflicts = self.known_conflicts
+
+        assert seen is not None
+        # Inorder, but avoid doing duplicate work...
+        for x in choice.deps:
+            # TODO display whether install or build dep, and whether pin disallows
+            # current version, has compatible bdist, no sdist, etc
+            key = (x.target.project, x.target.version, x.target.extras)
+            dep_extras = (
+                f"[{', '.join(sorted(x.target.extras))}]" if x.target.extras else ""
+            )
+            if key in seen:
+                click.echo(
+                    prefix
+                    + click.style(
+                        x.target.project,
+                        fg="magenta"
+                        if key[0] in known_conflicts and x.specifier
+                        else None,
+                    )
+                    + f"{dep_extras} (=={x.target.version}) (already listed){' ; ' + str(x.markers) if x.markers else ''} via "
+                    + click.style(x.specifier or "*", fg="yellow")
+                )
+            else:
+                if key[0] in known_conflicts:
+                    # conflicting decision
+                    color = "magenta"
+                else:
+                    color = "green"
+                    # color = "red" if not x.target.has_sdist else "green"
+                seen.add(key)
+                click.echo(
+                    prefix
+                    + click.style(
+                        x.target.project,
+                        fg=color,
+                    )
+                    + f"{dep_extras} (=={x.target.version}){' ; ' + str(x.markers) if x.markers else ''} via "
+                    + click.style(x.specifier or "*", fg="yellow")
+                )
+                #     + click.style(" no whl" if not x.target.has_bdist else "", fg="blue")
+                # )
+                if x.target.deps:
+                    self.print_tree(x.target, seen, known_conflicts, depth + 1)

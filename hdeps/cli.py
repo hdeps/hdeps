@@ -9,7 +9,7 @@ import keke
 
 from indexurl import get_index_url
 from packaging.requirements import Requirement
-from pypi_simple import PyPISimple, ACCEPT_JSON_PREFERRED
+from pypi_simple import ACCEPT_JSON_PREFERRED, PyPISimple
 
 from .markers import EnvironmentMarkers
 
@@ -65,6 +65,11 @@ def _stats_thread() -> None:
     metavar="VERSION",
     help="Optionally override python version.  Default is autodetect running.",
 )
+@click.option(
+    "--install-order",
+    is_flag=True,
+    help="Output a theoretical install order instead of a tree",
+)
 @click.option("-r", "--requirements-file", multiple=True)
 @click.argument(
     "deps",
@@ -80,6 +85,7 @@ def main(
     deps: List[str],
     platform: Optional[str],
     python_version: Optional[str],
+    install_order: bool,
 ) -> None:
     if trace:
         ctx.with_resource(keke.TraceOutput(trace))
@@ -104,8 +110,9 @@ def main(
         env_markers=EnvironmentMarkers.from_args(
             python_version=python_version, sys_platform=platform
         ),
-        pypi_simple=PyPISimple(get_index_url(), session=cached_session,
-        accept=ACCEPT_JSON_PREFERRED),
+        pypi_simple=PyPISimple(
+            get_index_url(), session=cached_session, accept=ACCEPT_JSON_PREFERRED
+        ),
         uncached_session=uncached_session,
     )
 
@@ -115,7 +122,10 @@ def main(
         walker.feed_file(Path(req))
 
     walker.drain()
-    walker.print_flat()
+    if install_order:
+        walker.print_flat()
+    else:
+        walker.print_tree()
 
 
 if __name__ == "__main__":

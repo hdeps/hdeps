@@ -46,8 +46,7 @@ class Project:
             try:
                 vers[Version(dp.version)].append(dp)
             except InvalidVersion:
-                LOG.debug("Ignore invalid version %s in %s", dp.version,
-                dp.filename)
+                LOG.debug("Ignore invalid version %s in %s", dp.version, dp.filename)
         return cls(
             name=CanonicalName(canonicalize_name(project_page.project)),
             versions={
@@ -71,7 +70,7 @@ class ProjectVersion:
         for pkg in self.packages:
             if pkg.has_metadata:
                 if md_bytes := extracted_metadata_cache.get(pkg.url):
-                   md = md_bytes.decode("utf-8")
+                    md = md_bytes.decode("utf-8")
                 else:
                     with kev("pypi_simple.get_package_metadata"):
                         md = ps.get_package_metadata(pkg)
