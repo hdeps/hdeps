@@ -155,6 +155,9 @@ class Walker:
                     self.pool.bump(fut2)
                 with kev("ver result", project_name=name, project_version=str(version)):
                     md = fut2.result()
+
+                choice.has_sdist = md.has_sdist
+                choice.has_wheel = md.has_wheel
                 for r in md.reqs:
                     r_name = CanonicalName(canonicalize_name(r.name))
                     LOG.info(
@@ -239,8 +242,7 @@ class Walker:
                     if cur and Version(cur) == x.target.version:
                         color = "cyan"
                     else:
-                        color = "green"
-                    # color = "red" if not x.target.has_sdist else "green"
+                        color = "red" if not x.target.has_sdist else "green"
                 seen.add(key)
                 click.echo(
                     prefix
@@ -250,8 +252,9 @@ class Walker:
                     )
                     + f"{dep_extras} (=={x.target.version}){' ; ' + str(x.markers) if x.markers else ''} via "
                     + click.style(x.specifier or "*", fg="yellow")
+                    + click.style(
+                        " no whl" if not x.target.has_wheel else "", fg="blue"
+                    )
                 )
-                #     + click.style(" no whl" if not x.target.has_bdist else "", fg="blue")
-                # )
                 if x.target.deps:
                     self.print_tree(x.target, seen, known_conflicts, depth + 1)

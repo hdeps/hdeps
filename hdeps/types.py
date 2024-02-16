@@ -19,6 +19,8 @@ class Choice:
     version: LooseVersion = field(repr=True)
     extras: Tuple[str, ...] = field(default_factory=tuple)
     deps: List[Edge] = field(default_factory=list)
+    has_sdist: bool = False
+    has_wheel: bool = False
 
 
 @dataclass

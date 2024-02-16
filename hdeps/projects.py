@@ -8,7 +8,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from email import message_from_string
 from functools import partial
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple, TypeVar, Union
 from zipfile import ZipFile
 
 from indexurl import get_index_url
@@ -28,6 +28,17 @@ from .cache import SimpleCache
 from .types import CanonicalName, LooseVersion
 
 LOG = logging.getLogger(__name__)
+
+T = TypeVar("T")
+D = TypeVar("D")
+
+
+def first(it: Iterable[T], default: D) -> Union[T, D]:
+    """like any(...) but returns the first truthy value"""
+    for x in it:
+        if x:
+            return x
+    return default
 
 
 @dataclass(frozen=True)
@@ -49,10 +60,7 @@ class Project:
                 LOG.debug("Ignore invalid version %s in %s", dp.version, dp.filename)
         return cls(
             name=CanonicalName(canonicalize_name(project_page.project)),
-            versions={
-                v: ProjectVersion(v, tuple(pkgs), None, False)
-                for v, pkgs in vers.items()
-            },
+            versions={v: ProjectVersion(v, tuple(pkgs)) for v, pkgs in vers.items()},
         )
 
 
@@ -60,8 +68,22 @@ class Project:
 class ProjectVersion:
     version: LooseVersion
     packages: Tuple[DistributionPackage, ...] = field(hash=False)
-    requires_python: Optional[str]
-    yanked: bool
+
+    @property
+    def requires_python(self) -> Optional[str]:
+        return first((dp.requires_python for dp in self.packages), None)
+
+    @property
+    def yanked(self) -> bool:
+        return first((dp.is_yanked for dp in self.packages), False)
+
+    @property
+    def has_sdist(self) -> bool:
+        return any(dp.package_type == "sdist" for dp in self.packages)
+
+    @property
+    def has_wheel(self) -> bool:
+        return any(dp.package_type == "wheel" for dp in self.packages)
 
     def get_deps(
         self, ps: PyPISimple, session: Session, extracted_metadata_cache: SimpleCache
@@ -89,39 +111,43 @@ class ProjectVersion:
                             get_range=partial(get_range_requests, session=session),
                             check_etag=False,
                         )
-                        zf = ZipFile(f)  # type: ignore[arg-type]
+                        zf = ZipFile(f)  # type: ignore[arg-type,call-overload,unused-ignore]
                         # These two lines come from warehouse itself
                         name, version, _ = pkg.filename.split("-", 2)
                         md_bytes = zf.read(f"{name}-{version}.dist-info/METADATA")
+                        assert md_bytes is not None
                         extracted_metadata_cache.set(pkg.url, md_bytes)
                     md = md_bytes.decode("utf-8")
                     break
 
-        assert md is not None
-        with kev("transform"):
-            msg = message_from_string(md)
-            reqs: List[Requirement] = []
-            deps = msg.get_all("Requires-Dist")
-            if deps:
-                for dep in deps:
-                    try:
-                        reqs.append(Requirement(dep))
-                    except InvalidRequirement:
-                        LOG.warning(
-                            "Skipping invalid requirement %r",
-                            dep,
-                        )
+        reqs: List[Requirement] = []
+        extras: List[str] = []
+        if md is not None:
+            with kev("transform"):
+                msg = message_from_string(md)
+                if t := msg.get_all("Requires-Dist"):
+                    for dep in t:
+                        try:
+                            reqs.append(Requirement(dep))
+                        except InvalidRequirement:
+                            LOG.warning(
+                                "Skipping invalid requirement %r",
+                                dep,
+                            )
 
-            extras: Optional[List[str]] = msg.get_all("Provides-Extra")
-            if extras is None:
-                extras = []
-        return BasicMetadata(reqs, extras)
+                if t := msg.get_all("Provides-Extra"):
+                    extras = t
+        return BasicMetadata(
+            reqs, extras, has_sdist=self.has_sdist, has_wheel=self.has_wheel
+        )
 
 
 @dataclass
 class BasicMetadata:
     reqs: Sequence[Requirement] = ()
     extras: Sequence[str] = ()
+    has_sdist: bool = False
+    has_wheel: bool = False
 
 
 if __name__ == "__main__":  # pragma: no cover
