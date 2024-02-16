@@ -1,0 +1,8 @@
+# Because we list a specifier on the second one, it won't reuse the latest chosen on the first one.
+# The specifier on the second one is also listed as-given (without the .0), but
+#   that's just an implementation detail.
+$ hdeps batman batman==1
+batman (==2.0) via *
+. robin (==2.0) via >1.0
+batman (==1.0) via ==1
+. robin (==1.0) via ==1.0

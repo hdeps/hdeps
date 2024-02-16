@@ -1,0 +1,5 @@
+# Because we list a specifier on the first one, the second one should reuse.
+$ hdeps batman==1 batman
+batman (==1.0) via ==1
+. robin (==1.0) via ==1.0
+batman (==1.0) (already listed) via *

@@ -1,0 +1,4 @@
+# A public version reusing a non-public version for a dep
+$ hdeps --have robin==1.5 batman
+batman (==2.0) via *
+. robin (==1.5) via >1.0 no whl
