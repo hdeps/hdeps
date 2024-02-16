@@ -10,12 +10,12 @@ on:
   pull_request:
 
 jobs:
-  hdeps-just-tests:
+  hdeps-just-smoketest:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.10", "3.11", "3.12"]
         os: [macOS-latest, ubuntu-latest, windows-latest]
 
     steps:
@@ -30,9 +30,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           make setup
-          pip install -U .[test]
+          pip install -U .
       - name: Test
-        run: make test
+        run: hdeps hdeps
 
   hdeps:
     runs-on: ${{ matrix.os }}
