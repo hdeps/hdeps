@@ -16,15 +16,26 @@ $ hdeps --have urllib3==1.999 requests
 ...
 ```
 
+# Why isn't it a solver?
+
+Think of this as a debugging solver.  It doesn't come up with one single
+solution, but does the bulk of the legwork to let you, the human, figure out
+what the problematic part of your dep tree is (even if the machine you're
+running on isn't the same as you're trying to figure out).
+
+If you want a real solver, I highly recommend look at
+[resolvelib](https://pypi.org/project/resolvelib/) for low-level operations, or
+[poetry](https://pypi.org/project/poetry/) which includes a higher-level solver
+that keeps track of operations (like "upgrade" separately from "install").
 
 # Version Compat
 
-Usage of this library should work back to 3.7, but development (and mypy
-compatibility) only on 3.10-3.12.  Linting requires 3.12 for full fidelity.
+This project should work on 3.10-3.12, including mypy compatibility as checked
+by tests.  Linting on older versions will not catch all issues (e.g. whitespace
+in f-strings), so 3.12 is recommended.  Some transitive dependencies
+(pydantic-core and libcst) rely on binary wheels that are not available yet on
+3.13 and do not easily build from source.
 
 # License
 
-hdeps is copyright [Tim Hatch](https://timhatch.com/), and licensed under
-the MIT license.  I am providing code in this repository to you under an open
-source license.  This is my personal repository; the license you receive to
-my code is from me and not from my employer. See the `LICENSE` file for details.
+MIT, see `LICENSE` for details.
