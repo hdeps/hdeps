@@ -2,7 +2,7 @@ import logging
 from typing import List, Optional, Tuple
 
 from packaging.requirements import Requirement
-from packaging.specifiers import SpecifierSet
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import Version
 from packaging_legacy.version import parse as parse_version
 
@@ -29,9 +29,13 @@ def find_best_compatible_version(
     possible: List[LooseVersion] = []
 
     for v, pv in project.versions.items():
-        if pv.requires_python and python_version not in SpecifierSet(
-            pv.requires_python
-        ):
+        try:
+            if pv.requires_python and python_version not in SpecifierSet(
+                pv.requires_python
+            ):
+                continue
+        except InvalidSpecifier as e:
+            LOG.debug("Ignore %s==%s because %r", project.name, v, e)
             continue
         possible.append(v)
 
