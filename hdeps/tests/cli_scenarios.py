@@ -8,7 +8,7 @@ from unittest.mock import patch
 from click.testing import CliRunner
 from parameterized import parameterized
 
-from ..cache import SimpleCache
+from ..cache import NoCache
 from ..cli import main
 
 from ._fake_session import get_fake_session_fixtures
@@ -61,9 +61,7 @@ class CliScenariosTest(unittest.TestCase):
     @parameterized.expand(SCENARIOS)  # type:ignore[misc]
     @patch("hdeps.cli.get_retry_session", get_fake_session_fixtures)
     @patch("hdeps.cli.get_cached_retry_session", get_fake_session_fixtures)
-    @patch(
-        "hdeps.cli.SimpleCache", lambda: SimpleCache(Path("x"))
-    )  # This "x" is relative to the isolated filesystem dir
+    @patch("hdeps.cli.SimpleCache", lambda: NoCache())
     def test_scenario(self, _unused_name: str, path: Path) -> None:
         with self.subTest(path):
             command, output = load_scenario(path)

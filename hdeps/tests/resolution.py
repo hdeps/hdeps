@@ -8,7 +8,7 @@ from click.testing import CliRunner
 from packaging.requirements import Requirement
 from pypi_simple import PyPISimple
 
-from ..cache import SimpleCache
+from ..cache import NoCache
 from ..markers import EnvironmentMarkers
 from ..resolution import Walker
 
@@ -25,10 +25,15 @@ class ResolutionTest(unittest.TestCase):
         env_markers = EnvironmentMarkers.from_args("3.7.5", None)
         runner = CliRunner()
         with runner.isolated_filesystem():
-            with patch("hdeps.resolution.SimpleCache", lambda: SimpleCache(Path("x"))):
-                walker = Walker(1, env_markers, pypi_simple, session)  # type: ignore[arg-type]
-                walker.feed(Requirement("batman==1"))
-                walker.drain()
+            walker = Walker(
+                1,
+                env_markers,
+                pypi_simple,
+                session,  # type: ignore[arg-type]
+                extracted_metadata_cache=NoCache(),
+            )
+            walker.feed(Requirement("batman==1"))
+            walker.drain()
 
         new_stdout = io.StringIO()
         with patch("sys.stdout", new_stdout):
@@ -60,10 +65,15 @@ batman (==1.0) via ==1
         env_markers = EnvironmentMarkers.from_args("3.7.5", None)
         runner = CliRunner()
         with runner.isolated_filesystem():
-            with patch("hdeps.resolution.SimpleCache", lambda: SimpleCache(Path("x"))):
-                walker = Walker(1, env_markers, pypi_simple, session)  # type: ignore[arg-type]
-                walker.feed(Requirement("batman==1"))
-                walker.drain()
+            walker = Walker(
+                1,
+                env_markers,
+                pypi_simple,
+                session,  # type: ignore[arg-type]
+                extracted_metadata_cache=NoCache(),
+            )
+            walker.feed(Requirement("batman==1"))
+            walker.drain()
 
         new_stdout = io.StringIO()
         with patch("sys.stdout", new_stdout):
