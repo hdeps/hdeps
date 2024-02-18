@@ -8,10 +8,12 @@ import click
 import keke
 
 from indexurl import get_index_url
+from indexurl.core import DEFAULT_INDEX_URL
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 from pypi_simple import ACCEPT_JSON_PREFERRED, PyPISimple
 
+from .cache import NoCache, SimpleCache
 from .markers import EnvironmentMarkers
 from .resolution import Walker
 from .session import get_cached_retry_session, get_retry_session
@@ -46,6 +48,17 @@ def _stats_thread() -> None:
     "-v",
     help="Enable verbose logging (specify multiple times for more)",
     count=True,
+)
+@click.option(
+    "-I",
+    "--isolate-env",
+    is_flag=True,
+    help="Isolate from the user's environment (use default index url).",
+)
+@click.option(
+    "--no-cache",
+    is_flag=True,
+    help="Do not read or write cache for dependencies.",
 )
 @click.option(
     "--parallelism",
@@ -89,6 +102,8 @@ def main(
     platform: Optional[str],
     python_version: Optional[str],
     install_order: bool,
+    isolate_env: bool,
+    no_cache: bool,
 ) -> None:
     if trace:
         ctx.with_resource(keke.TraceOutput(trace))
@@ -105,8 +120,19 @@ def main(
     if stats:
         threading.Thread(target=_stats_thread, daemon=True).start()
 
-    cached_session = get_cached_retry_session()
     uncached_session = get_retry_session()
+    extracted_metadata_cache: SimpleCache
+    if no_cache:
+        cached_session = uncached_session
+        extracted_metadata_cache = NoCache()
+    else:
+        cached_session = get_cached_retry_session()
+        extracted_metadata_cache = SimpleCache()
+
+    if isolate_env:
+        index_url = DEFAULT_INDEX_URL
+    else:
+        index_url = get_index_url()
 
     have_versions: Dict[CanonicalName, str] = {}
     for h in have:
@@ -119,10 +145,11 @@ def main(
             python_version=python_version, sys_platform=platform
         ),
         pypi_simple=PyPISimple(
-            get_index_url(), session=cached_session, accept=ACCEPT_JSON_PREFERRED
+            index_url, session=cached_session, accept=ACCEPT_JSON_PREFERRED
         ),
         uncached_session=uncached_session,
         current_version_callback=have_versions.get,
+        extracted_metadata_cache=extracted_metadata_cache,
     )
 
     for dep in deps:
