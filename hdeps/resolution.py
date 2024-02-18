@@ -68,6 +68,9 @@ class Walker:
     def feed(self, req: Requirement, source: str = "arg") -> None:
         name = CanonicalName(canonicalize_name(req.name))
         LOG.info("Feed %s (%r) from %s", name, str(req), source)
+        if req.marker and not self.env_markers.match(req.marker):
+            return
+
         if name not in self.memo_fetch:
             self.memo_fetch[name] = self.pool.submit(self._fetch_project, name, False)
 
