@@ -42,3 +42,11 @@ class SimpleCache:
             f.write(value)
 
         os.replace(temp_name, p)
+
+
+class NoCache(SimpleCache):
+    def get(self, key: str) -> Optional[bytes]:
+        return None
+
+    def set(self, key: str, value: bytes) -> None:
+        pass

@@ -45,13 +45,14 @@ class Walker:
         pypi_simple: PyPISimple,
         uncached_session: Optional[Session] = None,
         current_version_callback: VersionCallback = _all_current_versions_unknown,
+        extracted_metadata_cache: Optional[SimpleCache] = None,
     ):
         self.root = Choice(CanonicalName("-"), Version("0"))
         self.pool = ThreadPoolExecutor(max_workers=parallelism)
         self.env_markers = env_markers
         self.pypi_simple = pypi_simple
         self.uncached_session = uncached_session or get_retry_session()
-        self.extracted_metadata_cache = SimpleCache()
+        self.extracted_metadata_cache = extracted_metadata_cache or SimpleCache()
 
         self.memo_fetch: Dict[CanonicalName, Future[Project]] = {}
         self.memo_version_metadata: Dict[ProjectVersion, Future[BasicMetadata]] = {}

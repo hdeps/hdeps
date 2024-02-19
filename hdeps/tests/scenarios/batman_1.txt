@@ -1,0 +1,4 @@
+# This is a simple smoke test -- it should find a dep on robin==1
+$ hdeps batman==1
+batman (==1.0) via ==1
+. robin (==1.0) via ==1.0

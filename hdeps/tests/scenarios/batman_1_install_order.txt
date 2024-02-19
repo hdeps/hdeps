@@ -1,0 +1,4 @@
+# This is the same as batman_1.txt except output is flat
+$ hdeps --install-order batman==1
+robin==1.0
+batman==1.0

@@ -1,0 +1,3 @@
+# A non-public version (so we won't have deps)
+$ hdeps --have batman==1.5 batman
+batman (==1.5) via * no whl

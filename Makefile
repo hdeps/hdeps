@@ -1,5 +1,5 @@
 PYTHON?=python
-SOURCES=hdeps setup.py
+SOURCES=hdeps setup.py scripts
 
 .PHONY: venv
 venv:
@@ -27,7 +27,7 @@ format:
 lint:
 	python -m ufmt check $(SOURCES)
 	python -m flake8 $(SOURCES)
-	python -m checkdeps --allow-names hdeps hdeps
+	python -m checkdeps --metadata-extras test --allow-names hdeps hdeps
 	mypy --strict --install-types --non-interactive hdeps
 
 .PHONY: release
