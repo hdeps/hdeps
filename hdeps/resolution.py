@@ -3,7 +3,7 @@ from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor
 
 from pathlib import Path
-from typing import Dict, Optional, Set, Tuple
+from typing import Any, Dict, Optional, Set, Tuple
 
 import click
 
@@ -46,6 +46,7 @@ class Walker:
         uncached_session: Optional[Session] = None,
         current_version_callback: VersionCallback = _all_current_versions_unknown,
         extracted_metadata_cache: Optional[SimpleCache] = None,
+        color: Optional[bool] = None,
     ):
         self.root = Choice(CanonicalName("-"), Version("0"))
         self.pool = ThreadPoolExecutor(max_workers=parallelism)
@@ -53,6 +54,7 @@ class Walker:
         self.pypi_simple = pypi_simple
         self.uncached_session = uncached_session or get_retry_session()
         self.extracted_metadata_cache = extracted_metadata_cache or SimpleCache()
+        self.color = color
 
         self.memo_fetch: Dict[CanonicalName, Future[Project]] = {}
         self.memo_version_metadata: Dict[ProjectVersion, Future[BasicMetadata]] = {}
@@ -202,6 +204,15 @@ class Walker:
             if not flag:
                 print(f"{x.target.project}{dep_extras}=={x.target.version}")
 
+    COLORS: Dict[Optional[str], Optional[str]] = {
+        "conflict": "magenta",
+        "good": "green",
+        "have_reuse": "cyan",
+        "no_sdist": "red",
+        "no_wheel": "blue",
+        None: None,
+    }
+
     def print_tree(
         self,
         choice: Optional[Choice] = None,
@@ -226,40 +237,47 @@ class Walker:
             dep_extras = (
                 f"[{', '.join(sorted(x.target.extras))}]" if x.target.extras else ""
             )
-            if key in seen:
+
+            def print_line(color_choice: Optional[str], dep_stuff: Any) -> None:
                 click.echo(
                     prefix
-                    + click.style(
-                        x.target.project,
-                        fg="magenta"
-                        if key[0] in known_conflicts and x.specifier
-                        else None,
+                    + click.style(x.target.project, fg=self.COLORS[color_choice])
+                    + dep_stuff
+                    + (
+                        f" [{color_choice}]"
+                        # N.b. self.color is intentionally tri-state -- None
+                        # being autodetect in click and we assume it will be
+                        # enabled thus don't output names here.
+                        if color_choice and self.color is False
+                        else ""
                     )
-                    + f"{dep_extras} (=={x.target.version}) (already listed){' ; ' + str(x.markers) if x.markers else ''} via "
-                    + click.style(x.specifier or "*", fg="yellow")
+                )
+
+            if key in seen:
+                print_line(
+                    "conflict" if key[0] in known_conflicts and x.specifier else None,
+                    f"{dep_extras} (=={x.target.version}) (already listed){' ; ' + str(x.markers) if x.markers else ''} via "
+                    + click.style(x.specifier or "*", fg="yellow"),
                 )
             else:
                 if key[0] in known_conflicts:
                     # conflicting decision
-                    color = "magenta"
+                    color = "conflict"
                 else:
                     cur = self.current_version_callback(x.target.project)
                     if cur and Version(cur) == x.target.version:
-                        color = "cyan"
+                        color = "have_reuse"
                     else:
-                        color = "red" if not x.target.has_sdist else "green"
+                        color = "no_sdist" if not x.target.has_sdist else "good"
                 seen.add(key)
-                click.echo(
-                    prefix
-                    + click.style(
-                        x.target.project,
-                        fg=color,
-                    )
-                    + f"{dep_extras} (=={x.target.version}){' ; ' + str(x.markers) if x.markers else ''} via "
+
+                print_line(
+                    color,
+                    f"{dep_extras} (=={x.target.version}){' ; ' + str(x.markers) if x.markers else ''} via "
                     + click.style(x.specifier or "*", fg="yellow")
                     + click.style(
                         " no whl" if not x.target.has_wheel else "", fg="blue"
-                    )
+                    ),
                 )
                 if x.target.deps:
                     self.print_tree(x.target, seen, known_conflicts, depth + 1)
