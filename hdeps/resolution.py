@@ -213,6 +213,30 @@ class Walker:
         None: None,
     }
 
+    def print_legend(self) -> None:
+        click.echo(
+            click.style("[good]", fg=self.COLORS["good"]) + " is what you hope to see."
+        )
+        click.echo(
+            click.style("[conflict]", fg=self.COLORS["conflict"])
+            + " means two different versions were found during this walk."
+        )
+        click.echo(
+            click.style("[no_sdist]", fg=self.COLORS["no_sdist"])
+            + " means this project does not have an sdist.  (This is something"
+            + " to watch out for if you want to build from source.)"
+        )
+        # This is not a whole-line styling -- omit for now
+        # click.echo(
+        #     click.style("[no_wheel]", fg=self.COLORS["no_wheel"])
+        #     + " means this project does not have a wheel, thus might be missing its deps."
+        # )
+        click.echo(
+            click.style("[have_reuse]", fg=self.COLORS["have_reuse"])
+            + " means that a version specified in --have was kept."
+        )
+        click.echo()
+
     def print_tree(
         self,
         choice: Optional[Choice] = None,

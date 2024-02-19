@@ -1,0 +1,8 @@
+$ hdeps --print-legend --no-color batman
+[good] is what you hope to see.
+[conflict] means two different versions were found during this walk.
+[no_sdist] means this project does not have an sdist.  (This is something to watch out for if you want to build from source.)
+[have_reuse] means that a version specified in --have was kept.
+
+batman (==2.0) via * [no_sdist]
+. robin (==2.0) via >1.0 [no_sdist]

@@ -86,6 +86,11 @@ def _stats_thread() -> None:
     help="Output a theoretical install order instead of a tree",
 )
 @click.option(
+    "--print-legend",
+    is_flag=True,
+    help="Output the meaning of colors in a header",
+)
+@click.option(
     "--force-color",
     is_flag=True,
     help="Force color on even if stdout is not a tty.  You can also set the FORCE_COLOR env var non-empty.",
@@ -115,6 +120,7 @@ def main(
     install_order: bool,
     isolate_env: bool,
     no_cache: bool,
+    print_legend: bool,
     force_color: bool,
     no_color: bool,
 ) -> None:
@@ -180,6 +186,8 @@ def main(
     if install_order:
         walker.print_flat()
     else:
+        if print_legend:
+            walker.print_legend()
         walker.print_tree()
 
 
