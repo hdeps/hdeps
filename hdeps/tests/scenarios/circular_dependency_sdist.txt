@@ -1,0 +1,5 @@
+$ hdeps CircularDependencyA
+WARNING  hdeps.resolution:<n> Avoid circular dep processing circulardependencya
+circulardependencya (==0.0.0) via * no whl
+. circulardependencyb (==0.0.0) via * no whl
+. . circulardependencya (==0.0.0) (already listed) via *

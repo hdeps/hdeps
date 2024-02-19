@@ -24,7 +24,7 @@ from .markers import EnvironmentMarkers
 from .projects import BasicMetadata, Project, ProjectVersion
 from .requirements import _iter_simple_requirements
 from .session import get_retry_session
-from .types import CanonicalName, Choice, Edge, VersionCallback
+from .types import CanonicalName, Choice, ChoiceKeyType, Edge, VersionCallback
 
 LOG = logging.getLogger(__name__)
 
@@ -57,7 +57,9 @@ class Walker:
         self.memo_fetch: Dict[CanonicalName, Future[Project]] = {}
         self.memo_version_metadata: Dict[ProjectVersion, Future[BasicMetadata]] = {}
 
-        self.queue: deque[Tuple[Choice, CanonicalName, Requirement, str]] = deque()
+        self.queue: deque[
+            Tuple[Choice, CanonicalName, Requirement, str, Set[ChoiceKeyType]]
+        ] = deque()
         self.current_version_callback = current_version_callback
         self.known_conflicts: Set[CanonicalName] = set()
 
@@ -74,7 +76,8 @@ class Walker:
         if name not in self.memo_fetch:
             self.memo_fetch[name] = self.pool.submit(self._fetch_project, name, False)
 
-        self.queue.append((self.root, name, req, source))
+        empty_set: Set[ChoiceKeyType] = set()
+        self.queue.append((self.root, name, req, source, empty_set))
 
     @ktrace("project_name", "proactive", shortname=True)
     def _fetch_project(self, project_name: CanonicalName, proactive: bool) -> Project:
@@ -119,7 +122,7 @@ class Walker:
         chosen: Dict[CanonicalName, Version] = {}
 
         while self.queue:
-            (parent, name, req, source) = self.queue.popleft()
+            (parent, name, req, source, parent_keys) = self.queue.popleft()
             LOG.info(
                 "process %s %s from %s with extras %s", name, req, source, req.extras
             )
@@ -139,10 +142,14 @@ class Walker:
                     self.current_version_callback,
                 )
             choice = Choice(name, version)
+
             edge = Edge(
                 choice, specifier=req.specifier, markers=req.marker, note=source
             )
             parent.deps.append(edge)
+            if choice.key() in parent_keys:
+                LOG.warning("Avoid circular dep processing %s", name)
+                continue
 
             if cur and cur != version:
                 LOG.warning("Multiple versions for %s: %s and %s", name, cur, version)
@@ -173,7 +180,10 @@ class Walker:
                             fut = self.pool.submit(self._fetch_project, r_name, False)
                             self.memo_fetch[r_name] = fut
 
-                        self.queue.append((choice, r_name, r, "dep"))
+                        self.queue.append(
+                            (choice, r_name, r, "dep", parent_keys | {choice.key()})
+                        )
+
                         LOG.info("    keep")
                     else:
                         LOG.info("    omit")
