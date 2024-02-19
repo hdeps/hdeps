@@ -127,13 +127,14 @@ class Walker:
                 project = fut.result()
 
             cur = chosen.get(name)
-            version = find_best_compatible_version(
-                project,
-                req,
-                self.env_markers,
-                cur,
-                self.current_version_callback,
-            )
+            with kev("find_best_compatible_version", project_name=name, req=str(req)):
+                version = find_best_compatible_version(
+                    project,
+                    req,
+                    self.env_markers,
+                    cur,
+                    self.current_version_callback,
+                )
             choice = Choice(name, version)
             edge = Edge(
                 choice, specifier=req.specifier, markers=req.marker, note=source

@@ -1,0 +1,4 @@
+# we should only pick a version that's compatible.  The pyver projects in
+# fixtures all have requires-python for that same major.minor version
+$ hdeps --python-version=3.8 pyver
+pyver (==3.8) via *

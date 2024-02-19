@@ -1,5 +1,7 @@
 import logging
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
+
+from keke import kev
 
 from packaging.requirements import Requirement
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
@@ -28,20 +30,28 @@ def find_best_compatible_version(
     python_version = Version(python_version_str)
     possible: List[LooseVersion] = []
 
-    for v, pv in project.versions.items():
-        try:
-            if pv.requires_python and python_version not in SpecifierSet(
-                pv.requires_python
-            ):
+    requires_python_cache: Dict[str, bool] = {}
+
+    with kev("filter requires_python"):
+        for v, pv in project.versions.items():
+            try:
+                if pv.requires_python:
+                    result = requires_python_cache.get(pv.requires_python)
+                    if result is None:
+                        ss = SpecifierSet(pv.requires_python)
+                        result = python_version in ss
+                        requires_python_cache[pv.requires_python] = result
+                    if not result:
+                        continue
+            except InvalidSpecifier as e:
+                LOG.debug("Ignore %s==%s because %r", project.name, v, e)
                 continue
-        except InvalidSpecifier as e:
-            LOG.debug("Ignore %s==%s because %r", project.name, v, e)
-            continue
-        possible.append(v)
+            possible.append(v)
 
     # If the current version is a non-public version, we need to add it back
     # here.
-    cur = current_version_callback(project.name)
+    with kev("current_version_callback"):
+        cur = current_version_callback(project.name)
     cur_v: Optional[LooseVersion] = None
     if cur:
         cur_v = parse_version(cur)
@@ -57,7 +67,8 @@ def find_best_compatible_version(
     # The documentation for SepcifierSet.filter notes that it handles the logic
     # for whether to include prereleases, so we don't need that here.
     LOG.debug("possible %s", possible)
-    possible = list(req.specifier.filter(possible))
+    with kev("filter by specifier"):
+        possible = list(req.specifier.filter(possible))
     if not possible:
         raise ValueError(
             f"{project.name} has no {python_version}-compatible release with constraint {req.specifier}"
@@ -72,8 +83,9 @@ def find_best_compatible_version(
     #   version: LooseVersion )
     # so that after sorting the last item is the "best" one.
 
-    xform_possible: List[Tuple[bool, bool, int, Version]] = sorted(
-        (p == already_chosen, p == cur_v, i, p) for (i, p) in enumerate(possible)
-    )
+    with kev("final sort"):
+        xform_possible: List[Tuple[bool, bool, int, Version]] = sorted(
+            (p == already_chosen, p == cur_v, i, p) for (i, p) in enumerate(possible)
+        )
 
     return xform_possible[-1][3]
