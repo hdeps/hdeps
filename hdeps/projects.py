@@ -161,14 +161,12 @@ class ProjectVersion:
                             with tempfile.TemporaryDirectory() as d:
                                 pf = Path(d, pkg.filename)
                                 ps.download_package(pkg, pf, verify=bool(pkg.digests))
-                                tf = tarfile.TarFile.open(pf)
-                                names = filter_requires_txt_names(tf.getnames())
-                                if not names:
-                                    data = (
-                                        b""  # Allow caching when the file doesn't exist
-                                    )
-                                else:
-                                    data = tf.extractfile(names[0]).read()  # type: ignore[union-attr]
+                                with tarfile.TarFile.open(pf) as tf:
+                                    names = filter_requires_txt_names(tf.getnames())
+                                    if not names:
+                                        data = b""  # Allow caching when the file doesn't exist
+                                    else:
+                                        data = tf.extractfile(names[0]).read()  # type: ignore[union-attr]
                     else:
                         continue  # unknown type, don't cache today
 
