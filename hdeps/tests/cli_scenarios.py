@@ -1,4 +1,6 @@
+import logging
 import os
+import re
 import shlex
 import unittest
 from pathlib import Path
@@ -17,6 +19,9 @@ SCENARIOS = [
     (p.with_suffix("").name, p)
     for p in Path(__file__).parent.joinpath("scenarios").glob("*.txt")
 ]
+
+LOG_LINE_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3} ", re.M)
+LOG_LINE_NUMERIC_LINE_RE = re.compile(r"^([A-Z]+\s+[a-z_.]+:)\d+(?= )", re.M)
 
 
 def load_scenario(path: Path) -> Tuple[Tuple[str, ...], str]:
@@ -66,12 +71,17 @@ class CliScenariosTest(unittest.TestCase):
         with self.subTest(path):
             command, output = load_scenario(path)
 
-            runner = CliRunner(mix_stderr=False)
+            runner = CliRunner()
             with runner.isolated_filesystem():
+                del logging.root.handlers[:]
                 result = runner.invoke(main, command, catch_exceptions=False)
 
+            cleaned_output = LOG_LINE_TIMESTAMP_RE.sub("", result.output)
+            cleaned_output = LOG_LINE_NUMERIC_LINE_RE.sub(
+                lambda m: (m.group(1) + "<n>"), cleaned_output
+            )
+
             if os.getenv("UPDATE_SCENARIOS"):
-                save_scenario(path, result.output)
+                save_scenario(path, cleaned_output)
             else:
-                # TODO ensure we got the correct log messages too
-                self.assertEqual(output, result.output)
+                self.assertEqual(output, cleaned_output)
