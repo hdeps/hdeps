@@ -6,11 +6,10 @@ from keke import kev
 from packaging.requirements import Requirement
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import Version
-from packaging_legacy.version import parse as parse_version
 
 from .markers import EnvironmentMarkers
 from .projects import Project
-from .types import LooseVersion, VersionCallback
+from .types import VersionCallback
 
 LOG = logging.getLogger(__name__)
 
@@ -19,16 +18,16 @@ def find_best_compatible_version(
     project: Project,
     req: Requirement,
     env_markers: EnvironmentMarkers,
-    already_chosen: Optional[LooseVersion],
+    already_chosen: Optional[Version],
     current_version_callback: VersionCallback,
-) -> LooseVersion:
+) -> Version:
     # Handle requires_python first, so we can produce a better error message
     # when there are no version-compatible candidates (before we even get to
     # req.specifier)
     python_version_str = env_markers.python_full_version
     assert python_version_str is not None
     python_version = Version(python_version_str)
-    possible: List[LooseVersion] = []
+    possible: List[Version] = []
 
     requires_python_cache: Dict[str, bool] = {}
 
@@ -52,9 +51,9 @@ def find_best_compatible_version(
     # here.
     with kev("current_version_callback"):
         cur = current_version_callback(project.name)
-    cur_v: Optional[LooseVersion] = None
+    cur_v: Optional[Version] = None
     if cur:
-        cur_v = parse_version(cur)
+        cur_v = Version(cur)
         # Here be dragons: if we already filtered the current version out for
         # requires_python, then don't bother adding it back in; this is only
         # intended for non-public version reuse.
@@ -80,7 +79,7 @@ def find_best_compatible_version(
     # ( matches_already_chosen: bool,
     #   matches_current_version: bool,
     #   recency_index: int,
-    #   version: LooseVersion )
+    #   version: Version )
     # so that after sorting the last item is the "best" one.
 
     with kev("final sort"):

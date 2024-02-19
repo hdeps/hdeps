@@ -25,7 +25,7 @@ from seekablehttpfile import SeekableHttpFile
 from seekablehttpfile.core import get_range_requests
 
 from .cache import SimpleCache
-from .types import CanonicalName, LooseVersion
+from .types import CanonicalName
 
 LOG = logging.getLogger(__name__)
 
@@ -44,11 +44,11 @@ def first(it: Iterable[T], default: D) -> Union[T, D]:
 @dataclass(frozen=True)
 class Project:
     name: CanonicalName
-    versions: Dict[LooseVersion, ProjectVersion]
+    versions: Dict[Version, ProjectVersion]
 
     @classmethod
     def from_pypi_simple_project_page(cls, project_page: ProjectPage) -> Project:
-        vers: Dict[LooseVersion, List[DistributionPackage]] = defaultdict(list)
+        vers: Dict[Version, List[DistributionPackage]] = defaultdict(list)
         # TODO sort vers
         for dp in project_page.packages:
             if dp.version is None:
@@ -66,7 +66,7 @@ class Project:
 
 @dataclass(frozen=True)
 class ProjectVersion:
-    version: LooseVersion
+    version: Version
     packages: Tuple[DistributionPackage, ...] = field(hash=False)
 
     @property
