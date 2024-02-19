@@ -1,7 +1,7 @@
 import logging
 from typing import Dict, List, Optional, Tuple
 
-from keke import kev
+from keke import kev, ktrace
 
 from packaging.requirements import Requirement
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
@@ -27,25 +27,41 @@ def find_best_compatible_version(
     python_version_str = env_markers.python_full_version
     assert python_version_str is not None
     python_version = Version(python_version_str)
-    possible: List[Version] = []
 
     requires_python_cache: Dict[str, bool] = {}
 
-    with kev("filter requires_python"):
-        for v, pv in project.versions.items():
-            try:
-                if pv.requires_python:
-                    result = requires_python_cache.get(pv.requires_python)
-                    if result is None:
-                        ss = SpecifierSet(pv.requires_python)
-                        result = python_version in ss
-                        requires_python_cache[pv.requires_python] = result
-                    if not result:
-                        continue
-            except InvalidSpecifier as e:
-                LOG.debug("Ignore %s==%s because %r", project.name, v, e)
-                continue
-            possible.append(v)
+    def requires_python_match(v):
+        pv = project.versions[v]
+        if not pv.requires_python:
+            return True
+        if verdict := requires_python_cache.get(pv.requires_python) is not None:
+            return verdict
+        try:
+            specifier_set = SpecifierSet(pv.requires_python)
+            verdict = python_version in specifier_set
+        except InvalidSpecifier as e:
+            LOG.debug(
+                "Ignore %s==%s has invalid requires_python %r but including anway",
+                project.name,
+                v,
+                e,
+            )
+            verdict = True
+        requires_python_cache[pv.requires_python] = verdict
+        return verdict
+
+    possible: List[Version] = []
+
+    specifier_matched = False
+    with kev("reverse"):
+        rev = reversed(project.versions.keys())
+    with kev("initial filter"):
+        for version in req.specifier.filter(rev):
+            specifier_matched = True
+            if requires_python_match(version):
+                # Only keep the first one
+                possible.append(version)
+                break
 
     # If the current version is a non-public version, we need to add it back
     # here.
@@ -60,6 +76,9 @@ def find_best_compatible_version(
         if cur_v not in project.versions:
             possible.append(cur_v)
 
+    if already_chosen:
+        possible.append(already_chosen)
+
     if not possible:
         raise ValueError(f"{project.name} has no {python_version}-compatible release")
 
@@ -67,6 +86,7 @@ def find_best_compatible_version(
     # for whether to include prereleases, so we don't need that here.
     LOG.debug("possible %s", possible)
     with kev("filter by specifier"):
+        # This should only ever be ~3 items now!
         possible = list(req.specifier.filter(possible))
     if not possible:
         raise ValueError(
