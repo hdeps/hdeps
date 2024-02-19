@@ -1,5 +1,5 @@
 PYTHON?=python
-SOURCES=hdeps setup.py
+SOURCES=hdeps setup.py scripts
 
 .PHONY: venv
 venv:

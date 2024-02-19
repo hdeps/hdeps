@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from typing import List
 
+FIXTURE_BASE = Path("hdeps/tests/fixtures/")
+
 # This especially terrible html "parsing" is intended to roundtrip with edits.
 TERRIBLE_ANCHOR_RE = re.compile(r"(\s*<a)(.*?)(/?>.*)", re.S)
 TERRIBLE_ATTR_RE = re.compile(r'([\w-]+)(=)"(.*?)"')
@@ -36,7 +38,6 @@ class Anchor:
 
 
 def main():
-    FIXTURE_BASE = Path("hdeps/tests/fixtures/")
     for p in FIXTURE_BASE.glob("*.html"):
         print("Process", p)
         buf: List[str] = []
