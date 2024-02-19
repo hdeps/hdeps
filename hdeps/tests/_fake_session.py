@@ -9,7 +9,9 @@ class FakeSession:
     def __init__(self, fixture_root: Path) -> None:
         self.fixture_root = fixture_root
 
-    def get(self, url: str, headers: Any = None, timeout: float = 0) -> Response:
+    def get(
+        self, url: str, headers: Any = {}, timeout: float = 0, stream: bool = False
+    ) -> Response:
         # This is intended to "serve" any files from self.fixture_root, but git
         # checkouts on windows with core.autocrlf alter the line endings of
         # files it thinks are text.  We need the checksums of some text files
@@ -32,10 +34,14 @@ class FakeSession:
         if text:
             data = data.replace(b"\r\n", b"\n")
 
+        if headers.get("range"):
+            raise NotImplementedError()
+
         resp = Response()
         resp.raw = io.BytesIO(data)
         resp.status_code = 200
         resp.headers["content-type"] = "text/html"
+        resp.headers["content-length"] = str(len(data))
         return resp
 
 

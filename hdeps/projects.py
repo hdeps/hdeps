@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import logging
-
 import sys
+import tarfile
+import tempfile
 
 from collections import defaultdict
 from dataclasses import dataclass, field
 from email import message_from_string
 from functools import partial
+from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple, TypeVar, Union
 from zipfile import ZipFile
 
@@ -65,6 +67,15 @@ class Project:
         )
 
 
+def filter_requires_txt_names(names: List[str]) -> List[str]:
+    # TODO: I can't remember why it's <= 2 rather than a specific count
+    return [
+        name
+        for name in names
+        if name.endswith("/requires.txt") and name.count("/") <= 2
+    ]
+
+
 @dataclass(frozen=True)
 class ProjectVersion:
     version: Version
@@ -100,6 +111,8 @@ class ProjectVersion:
                         extracted_metadata_cache.set(pkg.url, md.encode("utf-8"))
                 break
         else:
+            # Wheels can be loaded incrementally, but also provide richer, more
+            # reliable metadata.
             for pkg in self.packages:
                 if pkg.package_type == "wheel":
                     if md_bytes := extracted_metadata_cache.get(pkg.url):
@@ -119,6 +132,54 @@ class ProjectVersion:
                         assert md_bytes is not None
                         extracted_metadata_cache.set(pkg.url, md_bytes)
                     md = md_bytes.decode("utf-8")
+                    break
+
+            # Sdists made with setuptools contain a requires.txt
+            for pkg in self.packages:
+                if pkg.package_type == "sdist":
+                    if md_bytes := extracted_metadata_cache.get(
+                        pkg.url + "#requires.txt"
+                    ):
+                        md = md_bytes.decode("utf-8")
+                        break
+
+                    if pkg.filename.endswith(".zip"):
+                        with kev("extract requires.txt remote", url=pkg.url):
+                            f = SeekableHttpFile(
+                                pkg.url,
+                                get_range=partial(get_range_requests, session=session),
+                                check_etag=False,
+                            )
+                            zf = ZipFile(f)  # type: ignore[arg-type,call-overload,unused-ignore]
+                            names = filter_requires_txt_names(zf.namelist())
+                            if not names:
+                                data = b""  # Allow caching when the file doesn't exist
+                            else:
+                                data = zf.read(names[0])
+                    elif pkg.filename.endswith((".gz", ".bz2")):
+                        with kev("extract requires.txt dl"):
+                            with tempfile.TemporaryDirectory() as d:
+                                pf = Path(d, pkg.filename)
+                                ps.download_package(pkg, pf, verify=bool(pkg.digests))
+                                tf = tarfile.TarFile.open(pf)
+                                names = filter_requires_txt_names(tf.getnames())
+                                if not names:
+                                    data = (
+                                        b""  # Allow caching when the file doesn't exist
+                                    )
+                                else:
+                                    data = tf.extractfile(names[0]).read()  # type: ignore[union-attr]
+                    else:
+                        continue  # unknown type, don't cache today
+
+                    buf = []
+                    # TODO this doesn't note Provides-Extra today
+                    for line in convert_sdist_requires(data.decode("utf-8")):
+                        buf.append(f"Requires-Dist: {line}\n")
+                    md = "".join(buf)
+                    extracted_metadata_cache.set(
+                        pkg.url + "#requires.txt", md.encode("utf-8")
+                    )
                     break
 
         reqs: List[Requirement] = []
@@ -141,6 +202,36 @@ class ProjectVersion:
         return BasicMetadata(
             reqs, extras, has_sdist=self.has_sdist, has_wheel=self.has_wheel
         )
+
+
+def convert_sdist_requires(data: str) -> List[str]:
+    # This is reverse engineered from looking at a couple examples, but there
+    # does not appear to be a formal spec.  Mentioned at
+    # https://setuptools.readthedocs.io/en/latest/formats.html#requires-txt
+    current_markers = None
+    lst: List[str] = []
+    for line in data.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        elif line[:1] == "[" and line[-1:] == "]":
+            current_markers = line[1:-1]
+            if ":" in current_markers:
+                # absl-py==0.9.0 and requests==2.22.0 are good examples of this
+                extra, markers = current_markers.split(":", 1)
+                if extra:
+                    current_markers = f"({markers}) and extra == {extra!r}"
+                else:
+                    current_markers = markers
+            else:
+                # this is an extras_require
+                current_markers = f"extra == {current_markers!r}"
+        else:
+            if current_markers:
+                lst.append(f"{line}; {current_markers}")
+            else:
+                lst.append(line)
+    return lst
 
 
 @dataclass
