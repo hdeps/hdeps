@@ -1,7 +1,7 @@
 import logging
 from typing import Dict, List, Optional, Tuple
 
-from keke import kev, ktrace
+from keke import kev
 
 from packaging.requirements import Requirement
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
@@ -30,7 +30,7 @@ def find_best_compatible_version(
 
     requires_python_cache: Dict[str, bool] = {}
 
-    def requires_python_match(v):
+    def requires_python_match(v: Version) -> bool:
         pv = project.versions[v]
         if not pv.requires_python:
             return True
@@ -80,7 +80,12 @@ def find_best_compatible_version(
         possible.append(already_chosen)
 
     if not possible:
-        raise ValueError(f"{project.name} has no {python_version}-compatible release")
+        if specifier_matched:
+            raise ValueError(
+                f"{project.name} has no {python_version}-compatible release"
+            )
+        else:
+            raise ValueError(f"{project.name} has no release matching {req.specifier}")
 
     # The documentation for SepcifierSet.filter notes that it handles the logic
     # for whether to include prereleases, so we don't need that here.
