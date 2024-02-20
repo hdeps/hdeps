@@ -22,6 +22,7 @@ class SimpleCache:
 
         self.cache_path = cache_path
         self.hash_factory = sha1
+        self.stats = {"hits": 0, "pass": 0, "sets": 0}
 
     def _local_path(self, key: str) -> Path:
         h = self.hash_factory(key.encode("utf-8")).hexdigest()
@@ -30,8 +31,11 @@ class SimpleCache:
     def get(self, key: str) -> Optional[bytes]:
         p = self._local_path(key)
         try:
-            return p.read_bytes()
+            data = p.read_bytes()
+            self.stats["hits"] += 1
+            return data
         except OSError:
+            self.stats["pass"] += 1
             return None
 
     def set(self, key: str, value: bytes) -> None:
@@ -42,6 +46,7 @@ class SimpleCache:
             f.write(value)
 
         os.replace(temp_name, p)
+        self.stats["sets"] += 1
 
 
 class NoCache(SimpleCache):
