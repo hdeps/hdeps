@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from email import message_from_string
 from functools import partial
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple, TypeVar, Union
+from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple, TypeVar, Union
 from zipfile import ZipFile
 
 from indexurl import get_index_url
@@ -100,85 +100,116 @@ class ProjectVersion:
     def get_deps(
         self, ps: PyPISimple, session: Session, extracted_metadata_cache: SimpleCache
     ) -> BasicMetadata:
-        md: Optional[str] = None
-        for pkg in self.packages:
-            if pkg.has_metadata:
-                if md_bytes := extracted_metadata_cache.get(pkg.url):
-                    md = md_bytes.decode("utf-8")
+        best_pkg: Optional[DistributionPackage] = None
+        best_score = 0
+        with kev("score", count=len(self.packages)):
+            for pkg in self.packages:
+                if pkg.has_metadata:
+                    score = 100
+                elif pkg.package_type == "wheel":
+                    score = 90
+                elif pkg.package_type == "sdist" and pkg.filename.endswith(".zip"):
+                    score = 50
+                elif pkg.package_type == "sdist":
+                    score = 30
                 else:
-                    with kev("pypi_simple.get_package_metadata"):
-                        md = ps.get_package_metadata(pkg)
-                        extracted_metadata_cache.set(pkg.url, md.encode("utf-8"))
-                break
-        else:
+                    LOG.debug("Cannot load metadata from %r", pkg.filename)
+                    continue
+                assert pkg
+                if score > best_score:
+                    best_pkg = pkg
+                    best_score = score
+                elif score == best_score and pkg.filename < best_pkg.filename:  # type: ignore[union-attr]
+                    # Ensure consistent ordering for good cache hits
+                    best_pkg = pkg
+
+        if best_pkg is None:
+            LOG.warning(
+                "Cannot load metadata from version %s, no matching packages in %s",
+                self.version,
+                [dp.filename for dp in self.packages],
+            )
+            return BasicMetadata()
+
+        md: str
+        if best_pkg.has_metadata:
+            if md_bytes := extracted_metadata_cache.get(best_pkg.url):
+                md = md_bytes.decode("utf-8")
+            else:
+                with kev("pypi_simple.get_package_metadata"):
+                    # pypi-simple does the decode for you today; this wastes a
+                    # ton of time trying to guess charset, until
+                    # https://github.com/jwodder/pypi-simple/pull/22 is merged.
+                    md = ps.get_package_metadata(best_pkg)
+                    extracted_metadata_cache.set(best_pkg.url, md.encode("utf-8"))
+        elif best_pkg.package_type == "wheel":
             # Wheels can be loaded incrementally, but also provide richer, more
             # reliable metadata.
-            for pkg in self.packages:
-                if pkg.package_type == "wheel":
-                    if md_bytes := extracted_metadata_cache.get(pkg.url):
-                        md = md_bytes.decode("utf-8")
-                        break
+            if md_bytes := extracted_metadata_cache.get(best_pkg.url):
+                md = md_bytes.decode("utf-8")
+            else:
+                with kev("extract metadata remote", url=best_pkg.url):
+                    f = SeekableHttpFile(
+                        best_pkg.url,
+                        get_range=partial(get_range_requests, session=session),
+                        check_etag=False,
+                    )
+                    zf = ZipFile(f)  # type: ignore[arg-type,call-overload,unused-ignore]
 
-                    with kev("extract metadata remote", url=pkg.url):
+                    # These two lines come from warehouse itself
+                    name, version, _ = best_pkg.filename.split("-", 2)
+                    md_bytes = zf.read(f"{name}-{version}.dist-info/METADATA")
+                    assert md_bytes is not None
+                    extracted_metadata_cache.set(best_pkg.url, md_bytes)
+                md = md_bytes.decode("utf-8")
+        elif best_pkg.package_type == "sdist":
+            # Sdists made with setuptools contain a requires.txt
+            cache_key = pkg.url + "#requires.txt"
+            if (md_bytes := extracted_metadata_cache.get(cache_key)) is not None:
+                md = md_bytes.decode("utf-8")
+            else:
+                if best_pkg.filename.endswith(".zip"):
+                    with kev("extract requires.txt remote", url=best_pkg.url):
                         f = SeekableHttpFile(
-                            pkg.url,
+                            best_pkg.url,
                             get_range=partial(get_range_requests, session=session),
                             check_etag=False,
                         )
                         zf = ZipFile(f)  # type: ignore[arg-type,call-overload,unused-ignore]
-                        # These two lines come from warehouse itself
-                        name, version, _ = pkg.filename.split("-", 2)
-                        md_bytes = zf.read(f"{name}-{version}.dist-info/METADATA")
-                        assert md_bytes is not None
-                        extracted_metadata_cache.set(pkg.url, md_bytes)
-                    md = md_bytes.decode("utf-8")
-                    break
+                        names = filter_requires_txt_names(zf.namelist())
+                        if not names:
+                            LOG.warning("No requires.txt in %s sdist", pkg.filename)
+                            data = b""
+                        else:
+                            data = zf.read(names[0])
+                elif pkg.filename.endswith((".gz", ".bz2", ".xz")):
+                    with kev("extract requires.txt dl"):
+                        with tempfile.TemporaryDirectory() as d:
+                            pf = Path(d, pkg.filename)
+                            ps.download_package(pkg, pf, verify=bool(pkg.digests))
+                            with tarfile.TarFile.open(pf) as tf:
+                                names = filter_requires_txt_names(tf.getnames())
+                                if not names:
+                                    # File is not in the archive
+                                    LOG.warning(
+                                        "No requires.txt in %s sdist", pkg.filename
+                                    )
+                                    data = b""
+                                else:
+                                    data = tf.extractfile(names[0]).read()  # type: ignore[union-attr]
+                else:
+                    raise NotImplementedError()
 
-            # Sdists made with setuptools contain a requires.txt
-            for pkg in self.packages:
-                if pkg.package_type == "sdist":
-                    if md_bytes := extracted_metadata_cache.get(
-                        pkg.url + "#requires.txt"
-                    ):
-                        md = md_bytes.decode("utf-8")
-                        break
-
-                    if pkg.filename.endswith(".zip"):
-                        with kev("extract requires.txt remote", url=pkg.url):
-                            f = SeekableHttpFile(
-                                pkg.url,
-                                get_range=partial(get_range_requests, session=session),
-                                check_etag=False,
-                            )
-                            zf = ZipFile(f)  # type: ignore[arg-type,call-overload,unused-ignore]
-                            names = filter_requires_txt_names(zf.namelist())
-                            if not names:
-                                data = b""  # Allow caching when the file doesn't exist
-                            else:
-                                data = zf.read(names[0])
-                    elif pkg.filename.endswith((".gz", ".bz2")):
-                        with kev("extract requires.txt dl"):
-                            with tempfile.TemporaryDirectory() as d:
-                                pf = Path(d, pkg.filename)
-                                ps.download_package(pkg, pf, verify=bool(pkg.digests))
-                                with tarfile.TarFile.open(pf) as tf:
-                                    names = filter_requires_txt_names(tf.getnames())
-                                    if not names:
-                                        data = b""  # Allow caching when the file doesn't exist
-                                    else:
-                                        data = tf.extractfile(names[0]).read()  # type: ignore[union-attr]
-                    else:
-                        continue  # unknown type, don't cache today
-
-                    buf = []
-                    # TODO this doesn't note Provides-Extra today
-                    for line in convert_sdist_requires(data.decode("utf-8")):
-                        buf.append(f"Requires-Dist: {line}\n")
-                    md = "".join(buf)
-                    extracted_metadata_cache.set(
-                        pkg.url + "#requires.txt", md.encode("utf-8")
-                    )
-                    break
+                buf = []
+                req_lines, extras_set = convert_sdist_requires(data.decode("utf-8"))
+                for line in req_lines:
+                    buf.append(f"Requires-Dist: {line}\n")
+                for extra in sorted(extras_set):
+                    buf.append(f"Provides-Extra: {extra}\n")
+                md = "".join(buf)
+                extracted_metadata_cache.set(cache_key, md.encode("utf-8") or b"\n")
+        else:
+            raise NotImplementedError(best_pkg)
 
         reqs: List[Requirement] = []
         extras: List[str] = []
@@ -202,11 +233,12 @@ class ProjectVersion:
         )
 
 
-def convert_sdist_requires(data: str) -> List[str]:
+def convert_sdist_requires(data: str) -> Tuple[List[str], Set[str]]:
     # This is reverse engineered from looking at a couple examples, but there
     # does not appear to be a formal spec.  Mentioned at
     # https://setuptools.readthedocs.io/en/latest/formats.html#requires-txt
     current_markers = None
+    extras: Set[str] = set()
     lst: List[str] = []
     for line in data.splitlines():
         line = line.strip()
@@ -218,6 +250,7 @@ def convert_sdist_requires(data: str) -> List[str]:
                 # absl-py==0.9.0 and requests==2.22.0 are good examples of this
                 extra, markers = current_markers.split(":", 1)
                 if extra:
+                    extras.add(extra)
                     current_markers = f"({markers}) and extra == {extra!r}"
                 else:
                     current_markers = markers
@@ -229,7 +262,7 @@ def convert_sdist_requires(data: str) -> List[str]:
                 lst.append(f"{line}; {current_markers}")
             else:
                 lst.append(line)
-    return lst
+    return lst, extras
 
 
 @dataclass
