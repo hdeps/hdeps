@@ -1,4 +1,5 @@
 import logging
+import threading
 from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor
 
@@ -55,6 +56,7 @@ class Walker:
         self.extracted_metadata_cache = extracted_metadata_cache or SimpleCache()
 
         self.memo_fetch: Dict[CanonicalName, Future[Project]] = {}
+        self.memo_fetch_lock = threading.Lock()
         self.memo_version_metadata: Dict[ProjectVersion, Future[BasicMetadata]] = {}
 
         self.queue: deque[
@@ -73,8 +75,11 @@ class Walker:
         if req.marker and not self.env_markers.match(req.marker):
             return
 
-        if name not in self.memo_fetch:
-            self.memo_fetch[name] = self.pool.submit(self._fetch_project, name, False)
+        with self.memo_fetch_lock:
+            if name not in self.memo_fetch:
+                self.memo_fetch[name] = self.pool.submit(
+                    self._fetch_project, name, False
+                )
 
         empty_set: Set[ChoiceKeyType] = set()
         self.queue.append((self.root, name, req, source, empty_set))
@@ -107,13 +112,19 @@ class Walker:
         # It's extremely likely that we will subsequently look up the deps of
         # this version, so go ahead and schedule that too.  (But not with any
         # extras.)
-        with kev("prefetch"):
+        with kev("prefetch", count=len(md.reqs)):
             for req in md.reqs:
                 name = CanonicalName(canonicalize_name(req.name))
-                if name not in self.memo_fetch and self.env_markers.match(req.marker):
-                    self.memo_fetch[name] = self.pool.submit(
-                        self._fetch_project, name, True
-                    )
+                # Don't bother with markers if we've already scheduled
+                if name not in self.memo_fetch:
+                    # Marker evaluation is relatively expensive
+                    if self.env_markers.match(req.marker):
+                        # Check again under the lock (for correctness, and since some time has elapsed)
+                        with self.memo_fetch_lock:
+                            if name not in self.memo_fetch:
+                                self.memo_fetch[name] = self.pool.submit(
+                                    self._fetch_project, name, True
+                                )
 
         LOG.debug("_fetch_project_metadata done %s %s", project_name, version)
         return md
@@ -176,9 +187,12 @@ class Walker:
                         "  drain possible requirement %s -> %s (%s)", name, r_name, r
                     )
                     if self.env_markers.match(r.marker, sorted(req.extras)):
-                        if r_name not in self.memo_fetch:
-                            fut = self.pool.submit(self._fetch_project, r_name, False)
-                            self.memo_fetch[r_name] = fut
+                        with self.memo_fetch_lock:
+                            if r_name not in self.memo_fetch:
+                                fut = self.pool.submit(
+                                    self._fetch_project, r_name, False
+                                )
+                                self.memo_fetch[r_name] = fut
 
                         self.queue.append(
                             (choice, r_name, r, "dep", parent_keys | {choice.key()})
