@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import sys
-import tarfile
 import tempfile
 
 from collections import defaultdict
@@ -10,9 +9,11 @@ from dataclasses import dataclass, field
 from email import message_from_string
 from functools import partial
 from pathlib import Path
+from tarfile import TarFile
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple, TypeVar, Union
 from zipfile import ZipFile
 
+import metadata_please
 from indexurl import get_index_url
 
 from keke import kev
@@ -132,6 +133,8 @@ class ProjectVersion:
             return BasicMetadata()
 
         md: str
+        # Ensure we don't accidentally use this later on; this was the source of a pesky cache bug
+        del pkg
         if best_pkg.has_metadata:
             if md_bytes := extracted_metadata_cache.get(best_pkg.url):
                 md = md_bytes.decode("utf-8")
@@ -158,56 +161,36 @@ class ProjectVersion:
 
                     # These two lines come from warehouse itself
                     name, version, _ = best_pkg.filename.split("-", 2)
-                    md_bytes = zf.read(f"{name}-{version}.dist-info/METADATA")
-                    assert md_bytes is not None
+                    md_bytes = metadata_please.from_wheel(zf, name)
                     extracted_metadata_cache.set(best_pkg.url, md_bytes)
                 md = md_bytes.decode("utf-8")
         elif best_pkg.package_type == "sdist":
-            # Sdists made with setuptools contain a requires.txt
-            cache_key = pkg.url + "#requires.txt"
-            if (md_bytes := extracted_metadata_cache.get(cache_key)) is not None:
+            key = best_pkg.url + "#requires.txt"
+            if (md_bytes := extracted_metadata_cache.get(key)) is not None:
                 md = md_bytes.decode("utf-8")
             else:
                 if best_pkg.filename.endswith(".zip"):
-                    with kev("extract requires.txt remote", url=best_pkg.url):
+                    with kev("extract sdist metadata remote", url=best_pkg.url):
                         f = SeekableHttpFile(
                             best_pkg.url,
                             get_range=partial(get_range_requests, session=session),
                             check_etag=False,
                         )
                         zf = ZipFile(f)  # type: ignore[arg-type,call-overload,unused-ignore]
-                        names = filter_requires_txt_names(zf.namelist())
-                        if not names:
-                            LOG.warning("No requires.txt in %s sdist", pkg.filename)
-                            data = b""
-                        else:
-                            data = zf.read(names[0])
-                elif pkg.filename.endswith((".gz", ".bz2", ".xz")):
-                    with kev("extract requires.txt dl"):
-                        with tempfile.TemporaryDirectory() as d:
-                            pf = Path(d, pkg.filename)
-                            ps.download_package(pkg, pf, verify=bool(pkg.digests))
-                            with tarfile.TarFile.open(pf) as tf:
-                                names = filter_requires_txt_names(tf.getnames())
-                                if not names:
-                                    # File is not in the archive
-                                    LOG.warning(
-                                        "No requires.txt in %s sdist", pkg.filename
-                                    )
-                                    data = b""
-                                else:
-                                    data = tf.extractfile(names[0]).read()  # type: ignore[union-attr]
+                        md_bytes = metadata_please.from_zip_sdist(zf)
                 else:
-                    raise NotImplementedError()
+                    with kev("extract tar metadata", url=best_pkg.url):
+                        with tempfile.TemporaryDirectory() as d:
+                            local_path = Path(d, best_pkg.filename)
+                            ps.download_package(
+                                best_pkg, path=local_path, verify=bool(best_pkg.digests)
+                            )
+                            with TarFile.open(local_path) as tf:
+                                md_bytes = metadata_please.from_tar_sdist(tf)
 
-                buf = []
-                req_lines, extras_set = convert_sdist_requires(data.decode("utf-8"))
-                for line in req_lines:
-                    buf.append(f"Requires-Dist: {line}\n")
-                for extra in sorted(extras_set):
-                    buf.append(f"Provides-Extra: {extra}\n")
-                md = "".join(buf)
-                extracted_metadata_cache.set(cache_key, md.encode("utf-8") or b"\n")
+                extracted_metadata_cache.set(key, md_bytes)
+                md = md_bytes.decode("utf-8")
+
         else:
             raise NotImplementedError(best_pkg)
 
