@@ -91,14 +91,10 @@ def _stats_thread() -> None:
     help="Output the meaning of colors in a header",
 )
 @click.option(
-    "--force-color",
+    "--color/--no-color",
     is_flag=True,
-    help="Force color on even if stdout is not a tty.  You can also set the FORCE_COLOR env var non-empty.",
-)
-@click.option(
-    "--no-color",
-    is_flag=True,
-    help="Disable colors, and show symbolic names next to tree lines.  You can also set the NO_COLOR env var non-empty.",
+    default=None,
+    help="Default is to guess from NO_COLOR or FORCE_COLOR env vars being non-empty",
 )
 @click.option("--have", help="pkg==ver to assume already installed", multiple=True)
 @click.option("-r", "--requirements-file", multiple=True)
@@ -121,8 +117,7 @@ def main(
     isolate_env: bool,
     no_cache: bool,
     print_legend: bool,
-    force_color: bool,
-    no_color: bool,
+    color: Optional[bool],
 ) -> None:
     if trace:
         ctx.with_resource(keke.TraceOutput(trace))
@@ -153,9 +148,9 @@ def main(
     else:
         index_url = get_index_url()
 
-    if force_color or os.environ.get("FORCE_COLOR"):
+    if color is True or (color is None and os.environ.get("FORCE_COLOR")):
         ctx.color = True
-    elif no_color or os.environ.get("NO_COLOR"):
+    elif color is False or (color is None and os.environ.get("NO_COLOR")):
         ctx.color = False
 
     have_versions: Dict[CanonicalName, str] = {}
