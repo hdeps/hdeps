@@ -24,7 +24,7 @@ from .markers import EnvironmentMarkers
 from .projects import BasicMetadata, Project, ProjectVersion
 from .requirements import _iter_simple_requirements
 from .session import get_retry_session
-from .types import CanonicalName, Choice, Edge, LooseVersion, VersionCallback
+from .types import CanonicalName, Choice, Edge, VersionCallback
 
 LOG = logging.getLogger(__name__)
 
@@ -116,7 +116,7 @@ class Walker:
         return md
 
     def drain(self) -> None:
-        chosen: Dict[CanonicalName, LooseVersion] = {}
+        chosen: Dict[CanonicalName, Version] = {}
 
         while self.queue:
             (parent, name, req, source) = self.queue.popleft()
@@ -182,7 +182,7 @@ class Walker:
         self,
         choice: Optional[Choice] = None,
         seen: Optional[
-            Set[Tuple[CanonicalName, LooseVersion, Optional[Tuple[str, ...]]]]
+            Set[Tuple[CanonicalName, Version, Optional[Tuple[str, ...]]]]
         ] = None,
     ) -> None:
         if choice is None:
@@ -206,7 +206,7 @@ class Walker:
         self,
         choice: Optional[Choice] = None,
         seen: Optional[
-            Set[Tuple[CanonicalName, LooseVersion, Optional[Tuple[str, ...]]]]
+            Set[Tuple[CanonicalName, Version, Optional[Tuple[str, ...]]]]
         ] = None,
         known_conflicts: Set[CanonicalName] = set(),
         depth: int = 0,
