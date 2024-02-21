@@ -27,7 +27,8 @@ format:
 lint:
 	python -m ufmt check $(SOURCES)
 	python -m flake8 $(SOURCES)
-	python -m checkdeps --excludes 'hdeps/tests/demo_project/*.py' --metadata-extras test --allow-names hdeps hdeps
+	# TODO: Excludes don't appear to work right on Windows, which is why setuptools is also in allow-names
+	python -m checkdeps --excludes 'hdeps/tests/demo_project/*.py' --metadata-extras test --allow-names hdeps,setuptools hdeps
 	mypy --strict --install-types --non-interactive hdeps
 
 .PHONY: release
