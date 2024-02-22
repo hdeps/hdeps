@@ -4,7 +4,7 @@ import re
 import shlex
 import unittest
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 from unittest.mock import patch
 
 from click.testing import CliRunner
@@ -15,10 +15,13 @@ from ..cli import main
 
 from ._fake_session import get_fake_session_fixtures
 
-SCENARIOS = [
+SCENARIOS: List[Tuple[str, Path]] = sorted(
+    # The first item in the tuple is special for parameterized and gets mangled
+    # into the test name.  It needs to be a valid identifier, so we still use
+    # subTest below to get the actual filename printed for copy-pasting.
     (p.with_suffix("").name, p)
     for p in Path(__file__).parent.joinpath("scenarios").glob("*.txt")
-]
+)
 
 LOG_LINE_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3} ", re.M)
 LOG_LINE_NUMERIC_LINE_RE = re.compile(r"^([A-Z]+\s+[a-z_.]+:)\d+(?= )", re.M)

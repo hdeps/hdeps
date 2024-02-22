@@ -1,0 +1,5 @@
+$ hdeps --no-color batman==1 batman==2
+batman (==1.0) via ==1 [conflict]
+. robin (==1.0) via ==1.0 [conflict]
+batman (==2.0) via ==2 [conflict]
+. robin (==2.0) via >1.0 [conflict]

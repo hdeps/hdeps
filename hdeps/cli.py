@@ -1,4 +1,5 @@
 import logging
+import os
 import threading
 import time
 from pathlib import Path
@@ -84,6 +85,17 @@ def _stats_thread() -> None:
     is_flag=True,
     help="Output a theoretical install order instead of a tree",
 )
+@click.option(
+    "--print-legend",
+    is_flag=True,
+    help="Output the meaning of colors in a header",
+)
+@click.option(
+    "--color/--no-color",
+    is_flag=True,
+    default=None,
+    help="Default is to guess from NO_COLOR or FORCE_COLOR env vars being non-empty",
+)
 @click.option("--have", help="pkg==ver to assume already installed", multiple=True)
 @click.option("-r", "--requirements-file", multiple=True)
 @click.argument(
@@ -104,6 +116,8 @@ def main(
     install_order: bool,
     isolate_env: bool,
     no_cache: bool,
+    print_legend: bool,
+    color: Optional[bool],
 ) -> None:
     if trace:
         ctx.with_resource(keke.TraceOutput(trace))
@@ -134,6 +148,11 @@ def main(
     else:
         index_url = get_index_url()
 
+    if color is True or (color is None and os.environ.get("FORCE_COLOR")):
+        ctx.color = True
+    elif color is False or (color is None and os.environ.get("NO_COLOR")):
+        ctx.color = False
+
     have_versions: Dict[CanonicalName, str] = {}
     for h in have:
         k, _, v = h.partition("==")
@@ -150,6 +169,7 @@ def main(
         uncached_session=uncached_session,
         current_version_callback=have_versions.get,
         extracted_metadata_cache=extracted_metadata_cache,
+        color=ctx.color,
     )
 
     for dep in deps:
@@ -161,6 +181,8 @@ def main(
     if install_order:
         walker.print_flat()
     else:
+        if print_legend:
+            walker.print_legend()
         walker.print_tree()
 
 
