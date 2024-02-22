@@ -94,9 +94,17 @@ def find_best_compatible_version(
         # This should only ever be ~3 items now!
         possible = list(req.specifier.filter(possible))
     if not possible:
-        raise ValueError(
-            f"{project.name} has no {python_version}-compatible release with constraint {req.specifier}"
-        )
+        if not list(req.specifier.filter(project.versions.keys())):
+            # Referencing the dragon above, if we had a current version and it was
+            # unsuitable, then we still output a generic message.  Note that > does not
+            # set the prerelease bit, but >= does.
+            raise ValueError(
+                f"{project.name} has no release with constraint {req.specifier}"
+            )
+        else:
+            raise ValueError(
+                f"{project.name} has no {python_version}-compatible release with constraint {req.specifier}"
+            )
 
     # TODO: yanked support
 

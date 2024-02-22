@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import logging
-
 import sys
+import tempfile
 
 from collections import defaultdict
 from dataclasses import dataclass, field
 from email import message_from_string
 from functools import partial
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple, TypeVar, Union
+from pathlib import Path
+from tarfile import TarFile
+from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple, TypeVar, Union
 from zipfile import ZipFile
 
+import metadata_please
 from indexurl import get_index_url
 
 from keke import kev
@@ -65,6 +68,15 @@ class Project:
         )
 
 
+def filter_requires_txt_names(names: List[str]) -> List[str]:
+    # TODO: I can't remember why it's <= 2 rather than a specific count
+    return [
+        name
+        for name in names
+        if name.endswith("/requires.txt") and name.count("/") <= 2
+    ]
+
+
 @dataclass(frozen=True)
 class ProjectVersion:
     version: Version
@@ -89,37 +101,98 @@ class ProjectVersion:
     def get_deps(
         self, ps: PyPISimple, session: Session, extracted_metadata_cache: SimpleCache
     ) -> BasicMetadata:
-        md: Optional[str] = None
-        for pkg in self.packages:
-            if pkg.has_metadata:
-                if md_bytes := extracted_metadata_cache.get(pkg.url):
-                    md = md_bytes.decode("utf-8")
-                else:
-                    with kev("pypi_simple.get_package_metadata"):
-                        md = ps.get_package_metadata(pkg)
-                        extracted_metadata_cache.set(pkg.url, md.encode("utf-8"))
-                break
-        else:
+        best_pkg: Optional[DistributionPackage] = None
+        best_score = 0
+        with kev("score", count=len(self.packages)):
             for pkg in self.packages:
-                if pkg.package_type == "wheel":
-                    if md_bytes := extracted_metadata_cache.get(pkg.url):
-                        md = md_bytes.decode("utf-8")
-                        break
+                if pkg.has_metadata:
+                    score = 100
+                elif pkg.package_type == "wheel":
+                    score = 90
+                elif pkg.package_type == "sdist" and pkg.filename.endswith(".zip"):
+                    score = 50
+                elif pkg.package_type == "sdist":
+                    score = 30
+                else:
+                    LOG.debug("Cannot load metadata from %r", pkg.filename)
+                    continue
+                assert pkg
+                if score > best_score:
+                    best_pkg = pkg
+                    best_score = score
+                elif score == best_score and pkg.filename < best_pkg.filename:  # type: ignore[union-attr]
+                    # Ensure consistent ordering for good cache hits
+                    best_pkg = pkg
 
-                    with kev("extract metadata remote", url=pkg.url):
+        if best_pkg is None:
+            LOG.warning(
+                "Cannot load metadata from version %s, no matching packages in %s",
+                self.version,
+                [dp.filename for dp in self.packages],
+            )
+            return BasicMetadata()
+
+        md: str
+        # Ensure we don't accidentally use this later on; this was the source of a pesky cache bug
+        del pkg
+        if best_pkg.has_metadata:
+            if md_bytes := extracted_metadata_cache.get(best_pkg.url):
+                md = md_bytes.decode("utf-8")
+            else:
+                with kev("pypi_simple.get_package_metadata"):
+                    # pypi-simple does the decode for you today; this wastes a
+                    # ton of time trying to guess charset, until
+                    # https://github.com/jwodder/pypi-simple/pull/22 is merged.
+                    md = ps.get_package_metadata(best_pkg)
+                    extracted_metadata_cache.set(best_pkg.url, md.encode("utf-8"))
+        elif best_pkg.package_type == "wheel":
+            # Wheels can be loaded incrementally, but also provide richer, more
+            # reliable metadata.
+            if md_bytes := extracted_metadata_cache.get(best_pkg.url):
+                md = md_bytes.decode("utf-8")
+            else:
+                with kev("extract metadata remote", url=best_pkg.url):
+                    f = SeekableHttpFile(
+                        best_pkg.url,
+                        get_range=partial(get_range_requests, session=session),
+                        check_etag=False,
+                    )
+                    zf = ZipFile(f)  # type: ignore[arg-type,call-overload,unused-ignore]
+
+                    # These two lines come from warehouse itself
+                    name, version, _ = best_pkg.filename.split("-", 2)
+                    md_bytes = metadata_please.from_wheel(zf, name)
+                    extracted_metadata_cache.set(best_pkg.url, md_bytes)
+                md = md_bytes.decode("utf-8")
+        elif best_pkg.package_type == "sdist":
+            key = best_pkg.url + "#requires.txt"
+            if (md_bytes := extracted_metadata_cache.get(key)) is not None:
+                md = md_bytes.decode("utf-8")
+            else:
+                if best_pkg.filename.endswith(".zip"):
+                    with kev("extract sdist metadata remote", url=best_pkg.url):
                         f = SeekableHttpFile(
-                            pkg.url,
+                            best_pkg.url,
                             get_range=partial(get_range_requests, session=session),
                             check_etag=False,
                         )
                         zf = ZipFile(f)  # type: ignore[arg-type,call-overload,unused-ignore]
-                        # These two lines come from warehouse itself
-                        name, version, _ = pkg.filename.split("-", 2)
-                        md_bytes = zf.read(f"{name}-{version}.dist-info/METADATA")
-                        assert md_bytes is not None
-                        extracted_metadata_cache.set(pkg.url, md_bytes)
-                    md = md_bytes.decode("utf-8")
-                    break
+                        md_bytes = metadata_please.from_zip_sdist(zf)
+                else:
+                    with kev("extract tar metadata", url=best_pkg.url):
+                        with tempfile.TemporaryDirectory() as d:
+                            local_path = Path(d, best_pkg.filename)
+                            ps.download_package(
+                                best_pkg, path=local_path, verify=bool(best_pkg.digests)
+                            )
+                            with TarFile.open(local_path) as tf:
+                                md_bytes = metadata_please.from_tar_sdist(tf)
+
+                extracted_metadata_cache.set(key, md_bytes)
+                md = md_bytes.decode("utf-8")
+
+        else:
+            raise NotImplementedError(best_pkg)
 
         reqs: List[Requirement] = []
         extras: List[str] = []
@@ -141,6 +214,38 @@ class ProjectVersion:
         return BasicMetadata(
             reqs, extras, has_sdist=self.has_sdist, has_wheel=self.has_wheel
         )
+
+
+def convert_sdist_requires(data: str) -> Tuple[List[str], Set[str]]:
+    # This is reverse engineered from looking at a couple examples, but there
+    # does not appear to be a formal spec.  Mentioned at
+    # https://setuptools.readthedocs.io/en/latest/formats.html#requires-txt
+    current_markers = None
+    extras: Set[str] = set()
+    lst: List[str] = []
+    for line in data.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        elif line[:1] == "[" and line[-1:] == "]":
+            current_markers = line[1:-1]
+            if ":" in current_markers:
+                # absl-py==0.9.0 and requests==2.22.0 are good examples of this
+                extra, markers = current_markers.split(":", 1)
+                if extra:
+                    extras.add(extra)
+                    current_markers = f"({markers}) and extra == {extra!r}"
+                else:
+                    current_markers = markers
+            else:
+                # this is an extras_require
+                current_markers = f"extra == {current_markers!r}"
+        else:
+            if current_markers:
+                lst.append(f"{line}; {current_markers}")
+            else:
+                lst.append(line)
+    return lst, extras
 
 
 @dataclass

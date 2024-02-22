@@ -1,4 +1,5 @@
 import logging
+import threading
 from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor
 
@@ -24,7 +25,7 @@ from .markers import EnvironmentMarkers
 from .projects import BasicMetadata, Project, ProjectVersion
 from .requirements import _iter_simple_requirements
 from .session import get_retry_session
-from .types import CanonicalName, Choice, Edge, VersionCallback
+from .types import CanonicalName, Choice, ChoiceKeyType, Edge, VersionCallback
 
 LOG = logging.getLogger(__name__)
 
@@ -55,9 +56,12 @@ class Walker:
         self.extracted_metadata_cache = extracted_metadata_cache or SimpleCache()
 
         self.memo_fetch: Dict[CanonicalName, Future[Project]] = {}
+        self.memo_fetch_lock = threading.Lock()
         self.memo_version_metadata: Dict[ProjectVersion, Future[BasicMetadata]] = {}
 
-        self.queue: deque[Tuple[Choice, CanonicalName, Requirement, str]] = deque()
+        self.queue: deque[
+            Tuple[Choice, CanonicalName, Requirement, str, Set[ChoiceKeyType]]
+        ] = deque()
         self.current_version_callback = current_version_callback
         self.known_conflicts: Set[CanonicalName] = set()
 
@@ -71,10 +75,14 @@ class Walker:
         if req.marker and not self.env_markers.match(req.marker):
             return
 
-        if name not in self.memo_fetch:
-            self.memo_fetch[name] = self.pool.submit(self._fetch_project, name, False)
+        with self.memo_fetch_lock:
+            if name not in self.memo_fetch:
+                self.memo_fetch[name] = self.pool.submit(
+                    self._fetch_project, name, False
+                )
 
-        self.queue.append((self.root, name, req, source))
+        empty_set: Set[ChoiceKeyType] = set()
+        self.queue.append((self.root, name, req, source, empty_set))
 
     @ktrace("project_name", "proactive", shortname=True)
     def _fetch_project(self, project_name: CanonicalName, proactive: bool) -> Project:
@@ -104,13 +112,19 @@ class Walker:
         # It's extremely likely that we will subsequently look up the deps of
         # this version, so go ahead and schedule that too.  (But not with any
         # extras.)
-        with kev("prefetch"):
+        with kev("prefetch", count=len(md.reqs)):
             for req in md.reqs:
                 name = CanonicalName(canonicalize_name(req.name))
-                if name not in self.memo_fetch and self.env_markers.match(req.marker):
-                    self.memo_fetch[name] = self.pool.submit(
-                        self._fetch_project, name, True
-                    )
+                # Don't bother with markers if we've already scheduled
+                if name not in self.memo_fetch:
+                    # Marker evaluation is relatively expensive
+                    if self.env_markers.match(req.marker):
+                        # Check again under the lock (for correctness, and since some time has elapsed)
+                        with self.memo_fetch_lock:
+                            if name not in self.memo_fetch:
+                                self.memo_fetch[name] = self.pool.submit(
+                                    self._fetch_project, name, True
+                                )
 
         LOG.debug("_fetch_project_metadata done %s %s", project_name, version)
         return md
@@ -119,7 +133,7 @@ class Walker:
         chosen: Dict[CanonicalName, Version] = {}
 
         while self.queue:
-            (parent, name, req, source) = self.queue.popleft()
+            (parent, name, req, source, parent_keys) = self.queue.popleft()
             LOG.info(
                 "process %s %s from %s with extras %s", name, req, source, req.extras
             )
@@ -139,10 +153,14 @@ class Walker:
                     self.current_version_callback,
                 )
             choice = Choice(name, version)
+
             edge = Edge(
                 choice, specifier=req.specifier, markers=req.marker, note=source
             )
             parent.deps.append(edge)
+            if choice.key() in parent_keys:
+                LOG.warning("Avoid circular dep processing %s", name)
+                continue
 
             if cur and cur != version:
                 LOG.warning("Multiple versions for %s: %s and %s", name, cur, version)
@@ -169,11 +187,17 @@ class Walker:
                         "  drain possible requirement %s -> %s (%s)", name, r_name, r
                     )
                     if self.env_markers.match(r.marker, sorted(req.extras)):
-                        if r_name not in self.memo_fetch:
-                            fut = self.pool.submit(self._fetch_project, r_name, False)
-                            self.memo_fetch[r_name] = fut
+                        with self.memo_fetch_lock:
+                            if r_name not in self.memo_fetch:
+                                fut = self.pool.submit(
+                                    self._fetch_project, r_name, False
+                                )
+                                self.memo_fetch[r_name] = fut
 
-                        self.queue.append((choice, r_name, r, "dep"))
+                        self.queue.append(
+                            (choice, r_name, r, "dep", parent_keys | {choice.key()})
+                        )
+
                         LOG.info("    keep")
                     else:
                         LOG.info("    omit")
