@@ -1,4 +1,3 @@
-import logging
 import os
 import threading
 import time
@@ -13,6 +12,7 @@ from indexurl.core import DEFAULT_INDEX_URL
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 from pypi_simple import ACCEPT_JSON_PREFERRED, PyPISimple
+from vmodule import vmodule_init
 
 from .cache import NoCache, SimpleCache
 from .markers import EnvironmentMarkers
@@ -47,8 +47,13 @@ def _stats_thread() -> None:
 @click.option(
     "--verbose",
     "-v",
-    help="Enable verbose logging (specify multiple times for more)",
-    count=True,
+    type=int,
+    help="Enable verbose logging (default=WARNING, 0=INFO, 1=VLOG_1, 10=DEBUG)",
+)
+@click.option(
+    "--vmodule",
+    help="Enable verbose logging only for some explicitly named loggers (e.g. "
+    "'hdeps.resolution=1' would enable VLOG_1 for just that one logger.  Comma-separated.",
 )
 @click.option(
     "-I",
@@ -106,7 +111,8 @@ def main(
     ctx: click.Context,
     trace: Optional[IO[str]],
     stats: bool,
-    verbose: bool,
+    verbose: Optional[int],
+    vmodule: Optional[str],
     parallelism: int,
     have: List[str],
     requirements_file: List[str],
@@ -121,16 +127,7 @@ def main(
 ) -> None:
     if trace:
         ctx.with_resource(keke.TraceOutput(trace))
-    if verbose == 0:
-        level = logging.WARNING
-    elif verbose == 1:
-        level = logging.INFO
-    elif verbose >= 2:
-        level = logging.DEBUG
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)-15s %(levelname)-8s %(name)s:%(lineno)s %(message)s",
-    )
+    vmodule_init(verbose, vmodule)
     if stats:
         threading.Thread(target=_stats_thread, daemon=True).start()
 

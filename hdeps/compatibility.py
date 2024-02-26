@@ -6,6 +6,7 @@ from keke import kev
 from packaging.requirements import Requirement
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import Version
+from vmodule import VLOG_1
 
 from .markers import EnvironmentMarkers
 from .projects import Project
@@ -89,7 +90,7 @@ def find_best_compatible_version(
 
     # The documentation for SepcifierSet.filter notes that it handles the logic
     # for whether to include prereleases, so we don't need that here.
-    LOG.debug("possible %s", possible)
+    LOG.log(VLOG_1, "possible for %s: %s", req, possible)
     with kev("filter by specifier"):
         # This should only ever be ~3 items now!
         possible = list(req.specifier.filter(possible))

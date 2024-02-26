@@ -15,6 +15,7 @@ from packaging.utils import canonicalize_name
 from packaging.version import Version
 from pypi_simple import PyPISimple
 from requests.sessions import Session
+from vmodule import VLOG_1, VLOG_2
 
 # from tpe_prio import ThreadPoolExecutor
 
@@ -73,7 +74,7 @@ class Walker:
 
     def feed(self, req: Requirement, source: str = "arg") -> None:
         name = CanonicalName(canonicalize_name(req.name))
-        LOG.info("Feed %s (%r) from %s", name, str(req), source)
+        LOG.log(VLOG_1, "Feed %s (%r) from %s", name, str(req), source)
         if req.marker and not self.env_markers.match(req.marker):
             return
 
@@ -101,7 +102,7 @@ class Walker:
                     self._fetch_project_metadata, project_name, latest_version
                 )
 
-        LOG.debug("_fetch_project done %s", project_name)
+        LOG.log(VLOG_1, "_fetch_project done %s", project_name)
         return project
 
     @ktrace("project_name", "version.version", shortname=True)
@@ -128,7 +129,9 @@ class Walker:
                                     self._fetch_project, name, True
                                 )
 
-        LOG.debug("_fetch_project_metadata done %s %s", project_name, version)
+        LOG.log(
+            VLOG_1, "_fetch_project_metadata done %s %s", project_name, version.version
+        )
         return md
 
     def drain(self) -> None:
@@ -185,8 +188,12 @@ class Walker:
                 choice.has_wheel = md.has_wheel
                 for r in md.reqs:
                     r_name = CanonicalName(canonicalize_name(r.name))
-                    LOG.info(
-                        "  drain possible requirement %s -> %s (%s)", name, r_name, r
+                    LOG.log(
+                        VLOG_2,
+                        "  drain possible requirement %s -> %s (%s)",
+                        name,
+                        r_name,
+                        r,
                     )
                     if self.env_markers.match(r.marker, sorted(req.extras)):
                         with self.memo_fetch_lock:
@@ -200,9 +207,9 @@ class Walker:
                             (choice, r_name, r, "dep", parent_keys | {choice.key()})
                         )
 
-                        LOG.info("    keep")
+                        LOG.log(VLOG_2, "    keep")
                     else:
-                        LOG.info("    omit")
+                        LOG.log(VLOG_2, "    omit")
 
     def print_flat(
         self,
