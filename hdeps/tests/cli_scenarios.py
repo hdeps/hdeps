@@ -66,6 +66,8 @@ def save_scenario(path: Path, new_output: str) -> None:
 
 
 class CliScenariosTest(unittest.TestCase):
+    maxDiff = None
+
     @parameterized.expand(SCENARIOS)  # type:ignore[misc]
     @patch("hdeps.cli.get_retry_session", get_fake_session_fixtures)
     @patch("hdeps.cli.get_cached_retry_session", get_fake_session_fixtures)
