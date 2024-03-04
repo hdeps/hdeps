@@ -22,6 +22,8 @@ class FakeSession:
         # checkouts on windows with core.autocrlf alter the line endings of
         # files it thinks are text.  We need the checksums of some text files
         # like the mime documents *.metadata to be consistent.
+        if headers is None:
+            headers = {}
         text = True
         if url.endswith(".metadata"):
             parts = url.split("/")
