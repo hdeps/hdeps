@@ -172,7 +172,7 @@ def main(
         color=ctx.color,
     )
 
-    def solve():
+    def solve() -> None:
         for dep in deps:
             walker.feed(Requirement(dep))
         for req in requirements_file:

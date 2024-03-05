@@ -278,7 +278,7 @@ class Walker:
         seen: Optional[
             Set[Tuple[CanonicalName, Version, Optional[Tuple[str, ...]]]]
         ] = None,
-        known_conflicts: Dict[CanonicalName, Set[ProjectVersion]] = defaultdict(set),
+        known_conflicts: Dict[CanonicalName, Set[Version]] = defaultdict(set),
         depth: int = 0,
     ) -> None:
         prefix = ". " * depth
