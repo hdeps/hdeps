@@ -1,3 +1,4 @@
+import logging
 import os
 import threading
 import time
@@ -19,6 +20,8 @@ from .markers import EnvironmentMarkers
 from .resolution import Walker
 from .session import get_cached_retry_session, get_retry_session
 from .types import CanonicalName
+
+LOG = logging.getLogger(__name__)
 
 
 def _stats_thread() -> None:
@@ -169,18 +172,56 @@ def main(
         color=ctx.color,
     )
 
-    for dep in deps:
-        walker.feed(Requirement(dep))
-    for req in requirements_file:
-        walker.feed_file(Path(req))
+    def solve() -> None:
+        for dep in deps:
+            walker.feed(Requirement(dep))
+        for req in requirements_file:
+            walker.feed_file(Path(req))
+        walker.drain()
 
-    walker.drain()
+    solve()
+
     if install_order:
         walker.print_flat()
     else:
         if print_legend:
             walker.print_legend()
         walker.print_tree()
+
+    click.echo("========== Summary ==========")
+    if walker.known_conflicts:
+        resolutions: List[Requirement] = []
+        for project, versions in walker.known_conflicts.copy().items():
+            click.echo(
+                f"Found conflict: {project} {sorted([str(x) for x in versions])}"
+            )
+            for version in versions:
+                with keke.kev("pin_attempt", project=project, version=version):
+                    LOG.info("Trying to pin %s==%s", project, version)
+                    req = Requirement(f"{project}=={version}")
+                    walker.clear()
+                    # Add the pin as first requirement to see if it can be used
+                    # by all subsequent dependencies.
+                    walker.feed(req)
+                    solve()
+                if project not in walker.known_conflicts:
+                    resolutions.append(req)
+                    break
+
+        if resolutions:
+            click.echo("Pin these project versions to resolve conflict:")
+            for resolution in resolutions:
+                click.echo(resolution)
+
+        unresolved = walker.known_conflicts.keys() - {x.name for x in resolutions}
+        if unresolved:
+            click.echo("Failed to resolve following conflicts:")
+            for conflict in sorted(unresolved):
+                click.echo(
+                    f"{conflict} {sorted([str(x) for x in walker.known_conflicts[conflict]])}"
+                )
+    else:
+        click.echo("No conflicts found.")
 
 
 if __name__ == "__main__":

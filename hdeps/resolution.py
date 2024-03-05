@@ -1,6 +1,6 @@
 import logging
 import threading
-from collections import deque
+from collections import defaultdict, deque
 from concurrent.futures import Future, ThreadPoolExecutor
 
 from pathlib import Path
@@ -66,7 +66,11 @@ class Walker:
             Tuple[Choice, CanonicalName, Requirement, str, Set[ChoiceKeyType]]
         ] = deque()
         self.current_version_callback = current_version_callback
-        self.known_conflicts: Set[CanonicalName] = set()
+        self.known_conflicts: Dict[CanonicalName, Set[Version]] = defaultdict(set)
+
+    def clear(self) -> None:
+        self.root = Choice(CanonicalName("-"), Version("0"))
+        self.known_conflicts.clear()
 
     def feed_file(self, req_file: Path) -> None:
         for req in _iter_simple_requirements(req_file):
@@ -164,12 +168,12 @@ class Walker:
             )
             parent.deps.append(edge)
             if choice.key() in parent_keys:
-                LOG.warning("Avoid circular dep processing %s", name)
+                LOG.info("Avoid circular dep processing %s", name)
                 continue
 
             if cur and cur != version:
-                LOG.warning("Multiple versions for %s: %s and %s", name, cur, version)
-                self.known_conflicts.add(name)
+                LOG.info("Multiple versions for %s: %s and %s", name, cur, version)
+                self.known_conflicts[name].update([cur, version])
             chosen[name] = version
 
             if t := project.versions.get(version):
@@ -274,7 +278,7 @@ class Walker:
         seen: Optional[
             Set[Tuple[CanonicalName, Version, Optional[Tuple[str, ...]]]]
         ] = None,
-        known_conflicts: Set[CanonicalName] = set(),
+        known_conflicts: Dict[CanonicalName, Set[Version]] = defaultdict(set),
         depth: int = 0,
     ) -> None:
         prefix = ". " * depth

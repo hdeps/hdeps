@@ -1,7 +1,11 @@
 $ hdeps --no-color batman==1 batman==2
-WARNING  hdeps.resolution:<n> Multiple versions for batman: 1.0 and 2.0
-WARNING  hdeps.resolution:<n> Multiple versions for robin: 1.0 and 2.0
 batman (==1.0) via ==1 [conflict]
 . robin (==1.0) via ==1.0 [conflict]
 batman (==2.0) via ==2 [conflict]
 . robin (==2.0) via >1.0 [conflict]
+========== Summary ==========
+Found conflict: batman ['1.0', '2.0']
+Found conflict: robin ['1.0', '2.0']
+Failed to resolve following conflicts:
+batman ['1.0', '2.0']
+robin ['1.0', '2.0']

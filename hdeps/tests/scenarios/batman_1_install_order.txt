@@ -2,3 +2,5 @@
 $ hdeps --install-order batman==1
 robin==1.0
 batman==1.0
+========== Summary ==========
+No conflicts found.

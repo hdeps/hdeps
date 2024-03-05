@@ -6,3 +6,5 @@ $ hdeps --print-legend --no-color batman
 
 batman (==2.0) via * [no_sdist]
 . robin (==2.0) via >1.0 [no_sdist]
+========== Summary ==========
+No conflicts found.
