@@ -213,7 +213,7 @@ def main(
         unresolved = walker.known_conflicts.keys() - {x.name for x in resolutions}
         if unresolved:
             click.echo("Failed to resolve following conflicts:")
-            for conflict in unresolved:
+            for conflict in sorted(unresolved):
                 click.echo(
                     f"{conflict} {sorted([str(x) for x in walker.known_conflicts[conflict]])}"
                 )
