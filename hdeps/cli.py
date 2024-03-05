@@ -192,7 +192,7 @@ def main(
     if walker.known_conflicts:
         resolutions: List[Requirement] = []
         for project, versions in walker.known_conflicts.copy().items():
-            click.echo(f"Found conflict: {project} {versions}")
+            click.echo(f"Found conflict: {project} {sorted([str(x) for x in versions])}")
             for version in versions:
                 LOG.debug(f"Trying to pin {project}=={version}")
                 req = Requirement(f"{project}=={version}")
@@ -212,7 +212,7 @@ def main(
         if unresolved:
             click.echo("Failed to resolve following conflicts:")
             for conflict in unresolved:
-                click.echo(f"{conflict} {walker.known_conflicts[conflict]}")
+                click.echo(f"{conflict} {sorted([str(x) for x in walker.known_conflicts[conflict]])}")
     else:
         click.echo("No conflicts found.")
 

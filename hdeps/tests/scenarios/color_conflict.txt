@@ -4,8 +4,8 @@ batman (==1.0) via ==1 [conflict]
 batman (==2.0) via ==2 [conflict]
 . robin (==2.0) via >1.0 [conflict]
 ========== Summary ==========
-Found conflict: batman {<Version('2.0')>, <Version('1.0')>}
-Found conflict: robin {<Version('2.0')>, <Version('1.0')>}
+Found conflict: batman ['1.0', '2.0']
+Found conflict: robin ['1.0', '2.0']
 Failed to resolve following conflicts:
-batman {<Version('2.0')>, <Version('1.0')>}
-robin {<Version('2.0')>, <Version('1.0')>}
+batman ['1.0', '2.0']
+robin ['1.0', '2.0']

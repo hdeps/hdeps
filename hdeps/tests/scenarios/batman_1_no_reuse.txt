@@ -7,9 +7,9 @@ batman (==2.0) via *
 batman (==1.0) via ==1
 . robin (==1.0) via ==1.0
 ========== Summary ==========
-Found conflict: batman {<Version('2.0')>, <Version('1.0')>}
-Found conflict: robin {<Version('2.0')>, <Version('1.0')>}
+Found conflict: batman ['1.0', '2.0']
+Found conflict: robin ['1.0', '2.0']
 Pin these project versions to resolve conflict:
 batman==1.0
 Failed to resolve following conflicts:
-robin {<Version('2.0')>, <Version('1.0')>}
+robin ['1.0', '2.0']
