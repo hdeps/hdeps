@@ -196,11 +196,14 @@ def main(
                 f"Found conflict: {project} {sorted([str(x) for x in versions])}"
             )
             for version in versions:
-                LOG.debug(f"Trying to pin {project}=={version}")
-                req = Requirement(f"{project}=={version}")
-                walker.clear()
-                walker.feed(req)
-                solve()
+                with keke.kev("pin_attempt", project=project, version=version):
+                    LOG.info("Trying to pin %s==%s", project, version)
+                    req = Requirement(f"{project}=={version}")
+                    walker.clear()
+                    # Add the pin as first requirement to see if it can be used
+                    # by all subsequent dependencies.
+                    walker.feed(req)
+                    solve()
                 if project not in walker.known_conflicts:
                     resolutions.append(req)
                     break
