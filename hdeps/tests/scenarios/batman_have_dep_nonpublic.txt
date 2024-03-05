@@ -2,3 +2,5 @@
 $ hdeps --have robin==1.5 batman
 batman (==2.0) via *
 . robin (==1.5) via >1.0 no whl
+========== Summary ==========
+No conflicts found.

@@ -2,3 +2,5 @@
 # fixtures all have requires-python for that same major.minor version
 $ hdeps --python-version=3.8 pyver
 pyver (==3.8) via *
+========== Summary ==========
+No conflicts found.

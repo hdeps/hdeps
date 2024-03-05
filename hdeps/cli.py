@@ -172,12 +172,14 @@ def main(
         color=ctx.color,
     )
 
-    for dep in deps:
-        walker.feed(Requirement(dep))
-    for req in requirements_file:
-        walker.feed_file(Path(req))
+    def solve():
+        for dep in deps:
+            walker.feed(Requirement(dep))
+        for req in requirements_file:
+            walker.feed_file(Path(req))
+        walker.drain()
 
-    walker.drain()
+    solve()
 
     if install_order:
         walker.print_flat()
@@ -186,20 +188,23 @@ def main(
             walker.print_legend()
         walker.print_tree()
 
+    click.echo("========== Summary ==========")
     if walker.known_conflicts:
         resolutions: List[Requirement] = []
-        for project, versions in walker.known_conflicts.items():
+        for project, versions in walker.known_conflicts.copy().items():
             click.echo(f"Found conflict: {project} {versions}")
             for version in versions:
                 LOG.debug(f"Trying to pin {project}=={version}")
                 req = Requirement(f"{project}=={version}")
+                walker.clear()
                 walker.feed(req)
+                solve()
                 if project not in walker.known_conflicts:
                     resolutions.append(req)
                     break
 
         if resolutions:
-            click.echo("Project versions to resolve the conflict:")
+            click.echo("Pin these project versions to resolve conflict:")
             for resolution in resolutions:
                 click.echo(resolution)
 
@@ -208,6 +213,8 @@ def main(
             click.echo("Failed to resolve following conflicts:")
             for conflict in unresolved:
                 click.echo(f"{conflict} {walker.known_conflicts[conflict]}")
+    else:
+        click.echo("No conflicts found.")
 
 
 if __name__ == "__main__":

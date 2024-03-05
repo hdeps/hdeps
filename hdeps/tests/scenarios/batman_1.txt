@@ -2,3 +2,5 @@
 $ hdeps batman==1
 batman (==1.0) via ==1
 . robin (==1.0) via ==1.0
+========== Summary ==========
+No conflicts found.

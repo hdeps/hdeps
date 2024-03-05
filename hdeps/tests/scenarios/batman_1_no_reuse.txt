@@ -2,9 +2,14 @@
 # The specifier on the second one is also listed as-given (without the .0), but
 #   that's just an implementation detail.
 $ hdeps batman batman==1
-WARNING  hdeps.resolution:<n> Multiple versions for batman: 2.0 and 1.0
-WARNING  hdeps.resolution:<n> Multiple versions for robin: 2.0 and 1.0
 batman (==2.0) via *
 . robin (==2.0) via >1.0
 batman (==1.0) via ==1
 . robin (==1.0) via ==1.0
+========== Summary ==========
+Found conflict: batman {<Version('2.0')>, <Version('1.0')>}
+Found conflict: robin {<Version('2.0')>, <Version('1.0')>}
+Pin these project versions to resolve conflict:
+batman==1.0
+Failed to resolve following conflicts:
+robin {<Version('2.0')>, <Version('1.0')>}
