@@ -66,9 +66,7 @@ class Walker:
             Tuple[Choice, CanonicalName, Requirement, str, Set[ChoiceKeyType]]
         ] = deque()
         self.current_version_callback = current_version_callback
-        self.known_conflicts: Dict[CanonicalName, Set[Version]] = defaultdict(
-            set
-        )
+        self.known_conflicts: Dict[CanonicalName, Set[Version]] = defaultdict(set)
 
     def clear(self) -> None:
         self.root = Choice(CanonicalName("-"), Version("0"))
