@@ -1,6 +1,6 @@
 import logging
 import threading
-from collections import deque
+from collections import defaultdict, deque
 from concurrent.futures import Future, ThreadPoolExecutor
 
 from pathlib import Path
@@ -66,7 +66,9 @@ class Walker:
             Tuple[Choice, CanonicalName, Requirement, str, Set[ChoiceKeyType]]
         ] = deque()
         self.current_version_callback = current_version_callback
-        self.known_conflicts: Set[CanonicalName] = set()
+        self.known_conflicts: Dict[CanonicalName, Set[ProjectVersion]] = defaultdict(
+            set
+        )
 
     def feed_file(self, req_file: Path) -> None:
         for req in _iter_simple_requirements(req_file):
@@ -169,7 +171,7 @@ class Walker:
 
             if cur and cur != version:
                 LOG.warning("Multiple versions for %s: %s and %s", name, cur, version)
-                self.known_conflicts.add(name)
+                self.known_conflicts[name].update([cur, version])
             chosen[name] = version
 
             if t := project.versions.get(version):
@@ -274,7 +276,7 @@ class Walker:
         seen: Optional[
             Set[Tuple[CanonicalName, Version, Optional[Tuple[str, ...]]]]
         ] = None,
-        known_conflicts: Set[CanonicalName] = set(),
+        known_conflicts: Dict[CanonicalName, Set[ProjectVersion]] = defaultdict(set),
         depth: int = 0,
     ) -> None:
         prefix = ". " * depth
