@@ -2,6 +2,7 @@ import logging
 import os
 import re
 import shlex
+import shutil
 import unittest
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -79,6 +80,8 @@ class CliScenariosTest(unittest.TestCase):
             runner = CliRunner()
             with runner.isolated_filesystem():
                 del logging.root.handlers[:]
+                if (t := Path(path.parent, path.name + ".testdata")).exists():
+                    shutil.copy(t, os.getcwd())
                 result = runner.invoke(main, command, catch_exceptions=False)
 
             cleaned_output = LOG_LINE_TIMESTAMP_RE.sub("", result.output)

@@ -4,7 +4,7 @@ from collections import defaultdict, deque
 from concurrent.futures import Future, ThreadPoolExecutor
 
 from pathlib import Path
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Any, Dict, Optional, Sequence, Set, Tuple
 
 import click
 
@@ -67,13 +67,18 @@ class Walker:
         ] = deque()
         self.current_version_callback = current_version_callback
         self.known_conflicts: Dict[CanonicalName, Set[Version]] = defaultdict(set)
+        self._parsed_requirements_files_cache: Dict[Path, Sequence[Requirement]] = {}
 
     def clear(self) -> None:
         self.root = Choice(CanonicalName("-"), Version("0"))
         self.known_conflicts.clear()
 
     def feed_file(self, req_file: Path) -> None:
-        for req in _iter_simple_requirements(req_file):
+        if req_file not in self._parsed_requirements_files_cache:
+            reqs = list(_iter_simple_requirements(req_file))
+            self._parsed_requirements_files_cache[req_file] = reqs
+
+        for req in self._parsed_requirements_files_cache[req_file]:
             self.feed(req, str(req_file))
 
     def feed(self, req: Requirement, source: str = "arg") -> None:

@@ -2,6 +2,8 @@
 # thing here to avoid extra deps or fragile APIs, at the expense of missing some
 # deps and false-positives.
 
+import logging
+
 from glob import glob
 from pathlib import Path
 from typing import Iterator
@@ -9,17 +11,27 @@ from typing import Iterator
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
+LOG = logging.getLogger(__name__)
+
 # These all have iter- prefixes because I expect a more public api to pick a
 # couple and return sets instead.
 
+SHOWN_IGNORE_MESSAGE = False
+
 
 def _iter_simple_requirements(path: Path) -> Iterator[Requirement]:
+    global SHOWN_IGNORE_MESSAGE
     for line in path.read_text().splitlines():
         line = line.split("#", 1)[0].strip()
         if not line:
             continue
         if line.startswith("-"):
-            print("Ignoring", line)
+            if not SHOWN_IGNORE_MESSAGE:
+                LOG.warning(
+                    "Non-simple requirements are ignored (this message only prints once)"
+                )
+                SHOWN_IGNORE_MESSAGE = True
+            LOG.info("Ignoring line %r", line)
             continue
 
         # N.b. Requirement does not canonicalize its name

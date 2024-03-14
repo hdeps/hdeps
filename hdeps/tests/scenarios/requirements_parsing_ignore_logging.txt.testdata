@@ -1,0 +1,4 @@
+--index-url foo
+--no-binary foo
+batman==1
+batman==2
