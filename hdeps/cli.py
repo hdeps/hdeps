@@ -155,7 +155,9 @@ def main(
 
     have_versions: Dict[CanonicalName, str] = {}
     for h in have:
-        k, _, v = h.partition("==")
+        k, op, v = h.partition("==")
+        if op != "==":
+            raise click.ClickException(f"Invalid format for --have: {h!r}")
         have_versions[CanonicalName(canonicalize_name(k))] = v
 
     walker = Walker(
