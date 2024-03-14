@@ -1,0 +1,12 @@
+$ hdeps -r requirements_parsing_ignore_logging.txt.testdata
+WARNING  hdeps.requirements:<n> Non-simple requirements are ignored (this message only prints once)
+batman (==1.0) via ==1
+. robin (==1.0) via ==1.0
+batman (==2.0) via ==2
+. robin (==2.0) via >1.0
+========== Summary ==========
+Found conflict: batman ['1.0', '2.0']
+Found conflict: robin ['1.0', '2.0']
+Failed to resolve following conflicts:
+batman ['1.0', '2.0']
+robin ['1.0', '2.0']
