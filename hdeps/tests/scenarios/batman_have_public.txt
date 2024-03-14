@@ -1,0 +1,7 @@
+# There was a bug in PR #26 when the --have version exists, but is not the most
+# recent.
+$ hdeps batman --have batman==1 --have robin==2
+batman (==1) via *
+. robin (==1.0) via ==1.0
+========== Summary ==========
+No conflicts found.

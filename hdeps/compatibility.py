@@ -6,7 +6,7 @@ from keke import kev
 from packaging.requirements import Requirement
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import Version
-from vmodule import VLOG_1
+from vmodule import VLOG_1, VLOG_2
 
 from .markers import EnvironmentMarkers
 from .projects import Project
@@ -71,11 +71,16 @@ def find_best_compatible_version(
     cur_v: Optional[Version] = None
     if cur:
         cur_v = Version(cur)
-        # Here be dragons: if we already filtered the current version out for
-        # requires_python, then don't bother adding it back in; this is only
-        # intended for non-public version reuse.
-        if cur_v not in project.versions:
+        # Allow the current version to be a guess -- it doesn't actually have to
+        # be compatible with the current version of python.  Filter out if we
+        # know for sure.
+        if cur_v in project.versions:
+            if requires_python_match(cur_v):
+                possible.append(cur_v)
+        else:
+            # Non-public version, assume it's ok
             possible.append(cur_v)
+    LOG.log(VLOG_2, "Callback %s -> %s", cur, cur_v)
 
     if already_chosen:
         possible.append(already_chosen)
@@ -121,4 +126,7 @@ def find_best_compatible_version(
             (p == already_chosen, p == cur_v, i, p) for (i, p) in enumerate(possible)
         )
 
+    LOG.log(VLOG_1, "Sorted %s", project.name)
+    for el in xform_possible:
+        LOG.log(VLOG_1, "%s", el)
     return xform_possible[-1][3]
