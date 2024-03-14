@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import threading
@@ -104,6 +105,9 @@ def _stats_thread() -> None:
     default=None,
     help="Default is to guess from NO_COLOR or FORCE_COLOR env vars being non-empty",
 )
+@click.option(
+    "--conflicts-json", is_flag=True, help="Just output conflicts as a JSON document"
+)
 @click.option("--have", help="pkg==ver to assume already installed", multiple=True)
 @click.option("-r", "--requirements-file", multiple=True)
 @click.argument(
@@ -127,6 +131,7 @@ def main(
     no_cache: bool,
     print_legend: bool,
     color: Optional[bool],
+    conflicts_json: bool,
 ) -> None:
     if trace:
         ctx.with_resource(keke.TraceOutput(trace))
@@ -181,20 +186,25 @@ def main(
 
     solve()
 
-    if install_order:
-        walker.print_flat()
-    else:
-        if print_legend:
-            walker.print_legend()
-        walker.print_tree()
+    if not conflicts_json:
+        if install_order:
+            walker.print_flat()
+        else:
+            if print_legend:
+                walker.print_legend()
+            walker.print_tree()
 
-    click.echo("========== Summary ==========")
+    if not conflicts_json:
+        click.echo("========== Summary ==========")
+
     if walker.known_conflicts:
+        doc: Dict[str, List[str]] = {"fixable": [], "unfixable": []}
         resolutions: List[Requirement] = []
         for project, versions in walker.known_conflicts.copy().items():
-            click.echo(
-                f"Found conflict: {project} {sorted([str(x) for x in versions])}"
-            )
+            if not conflicts_json:
+                click.echo(
+                    f"Found conflict: {project} {sorted([str(x) for x in versions])}"
+                )
             for version in versions:
                 with keke.kev("pin_attempt", project=project, version=version):
                     LOG.info("Trying to pin %s==%s", project, version)
@@ -206,22 +216,30 @@ def main(
                     solve()
                 if project not in walker.known_conflicts:
                     resolutions.append(req)
+                    doc["fixable"].append(str(req))
                     break
 
-        if resolutions:
+        if resolutions and not conflicts_json:
             click.echo("Pin these project versions to resolve conflict:")
             for resolution in resolutions:
-                click.echo(resolution)
+                click.echo(f"  {resolution}")
 
         unresolved = walker.known_conflicts.keys() - {x.name for x in resolutions}
-        if unresolved:
+        doc["unfixable"].extend(map(str, unresolved))
+        if unresolved and not conflicts_json:
             click.echo("Failed to resolve following conflicts:")
             for conflict in sorted(unresolved):
                 click.echo(
                     f"{conflict} {sorted([str(x) for x in walker.known_conflicts[conflict]])}"
                 )
+
+        if conflicts_json:
+            click.echo(json.dumps(doc))
     else:
-        click.echo("No conflicts found.")
+        if conflicts_json:
+            click.echo("{}")
+        else:
+            click.echo("No conflicts found.")
 
 
 if __name__ == "__main__":
