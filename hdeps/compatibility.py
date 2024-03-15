@@ -29,7 +29,7 @@ def requires_python_match(
         verdict = python_version in specifier_set
     except InvalidSpecifier as e:
         LOG.debug(
-            "Ignore %s==%s has invalid requires_python %r but including anway",
+            "Ignore %s==%s has invalid requires_python %r but including anyway",
             project.name,
             v,
             e,
