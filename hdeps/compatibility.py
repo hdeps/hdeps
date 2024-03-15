@@ -1,3 +1,4 @@
+import functools
 import logging
 from typing import Dict, List, Optional, Tuple
 
@@ -15,6 +16,29 @@ from .types import VersionCallback
 LOG = logging.getLogger(__name__)
 
 
+def requires_python_match(
+    project: Project, cache: Dict[str, bool], python_version: Version, v: Version
+) -> bool:
+    pv = project.versions[v]
+    if not pv.requires_python:
+        return True
+    if (verdict := cache.get(pv.requires_python)) is not None:
+        return verdict
+    try:
+        specifier_set = SpecifierSet(pv.requires_python)
+        verdict = python_version in specifier_set
+    except InvalidSpecifier as e:
+        LOG.debug(
+            "Ignore %s==%s has invalid requires_python %r but including anyway",
+            project.name,
+            v,
+            e,
+        )
+        verdict = True
+    cache[pv.requires_python] = verdict
+    return verdict
+
+
 def find_best_compatible_version(
     project: Project,
     req: Requirement,
@@ -29,27 +53,9 @@ def find_best_compatible_version(
     assert python_version_str is not None
     python_version = Version(python_version_str)
 
-    requires_python_cache: Dict[str, bool] = {}
-
-    def requires_python_match(v: Version) -> bool:
-        pv = project.versions[v]
-        if not pv.requires_python:
-            return True
-        if verdict := requires_python_cache.get(pv.requires_python) is not None:
-            return verdict
-        try:
-            specifier_set = SpecifierSet(pv.requires_python)
-            verdict = python_version in specifier_set
-        except InvalidSpecifier as e:
-            LOG.debug(
-                "Ignore %s==%s has invalid requires_python %r but including anway",
-                project.name,
-                v,
-                e,
-            )
-            verdict = True
-        requires_python_cache[pv.requires_python] = verdict
-        return verdict
+    _requires_python_match = functools.partial(
+        requires_python_match, project, {}, python_version
+    )
 
     possible: List[Version] = []
 
@@ -59,7 +65,7 @@ def find_best_compatible_version(
     with kev("initial filter"):
         for version in req.specifier.filter(rev):
             specifier_matched = True
-            if requires_python_match(version):
+            if _requires_python_match(version):
                 # Only keep the first one
                 possible.append(version)
                 break
@@ -75,7 +81,7 @@ def find_best_compatible_version(
         # be compatible with the current version of python.  Filter out if we
         # know for sure.
         if cur_v in project.versions:
-            if requires_python_match(cur_v):
+            if _requires_python_match(cur_v):
                 possible.append(cur_v)
         else:
             # Non-public version, assume it's ok
