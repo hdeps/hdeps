@@ -13,7 +13,7 @@ from keke import kev, ktrace
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 from packaging.version import Version
-from pypi_simple import PyPISimple
+from pypi_simple import NoSuchProjectError, PyPISimple
 from requests.sessions import Session
 from vmodule import VLOG_1, VLOG_2
 
@@ -21,7 +21,7 @@ from vmodule import VLOG_1, VLOG_2
 
 from .cache import SimpleCache
 
-from .compatibility import find_best_compatible_version
+from .compatibility import find_best_compatible_version, NoMatchingRelease
 from .markers import EnvironmentMarkers
 from .projects import BasicMetadata, Project, ProjectVersion
 from .requirements import _iter_simple_requirements
@@ -93,7 +93,11 @@ class Walker:
 
     @ktrace("project_name", "proactive", shortname=True)
     def _fetch_project(self, project_name: CanonicalName, proactive: bool) -> Project:
-        project_page = self.pypi_simple.get_project_page(project_name)
+        try:
+            project_page = self.pypi_simple.get_project_page(project_name)
+        except NoSuchProjectError:
+            LOG.error("Missing project %s", project_name)
+            return Project(project_name, {})
         project = Project.from_pypi_simple_project_page(project_page)
         # It's extremely likely that we will subsequently look up the deps of
         # the most recent version, so go ahead and schedule the metadata fetch.
@@ -154,13 +158,17 @@ class Walker:
 
             cur = chosen.get(name)
             with kev("find_best_compatible_version", project_name=name, req=str(req)):
-                version = find_best_compatible_version(
-                    project,
-                    req,
-                    self.env_markers,
-                    cur,
-                    self.current_version_callback,
-                )
+                try:
+                    version = find_best_compatible_version(
+                        project,
+                        req,
+                        self.env_markers,
+                        cur,
+                        self.current_version_callback,
+                    )
+                except NoMatchingRelease:
+                    LOG.info("Missing dep %s processing %s", req, name)
+                    continue
             choice = Choice(name, version)
 
             edge = Edge(
