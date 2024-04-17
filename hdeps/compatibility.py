@@ -16,6 +16,10 @@ from .types import VersionCallback
 LOG = logging.getLogger(__name__)
 
 
+class NoMatchingRelease(Exception):
+    pass
+
+
 def requires_python_match(
     project: Project, cache: Dict[str, bool], python_version: Version, v: Version
 ) -> bool:
@@ -93,11 +97,13 @@ def find_best_compatible_version(
 
     if not possible:
         if specifier_matched:
-            raise ValueError(
+            raise NoMatchingRelease(
                 f"{project.name} has no {python_version}-compatible release"
             )
         else:
-            raise ValueError(f"{project.name} has no release matching {req.specifier}")
+            raise NoMatchingRelease(
+                f"{project.name} has no release matching {req.specifier}"
+            )
 
     # The documentation for SepcifierSet.filter notes that it handles the logic
     # for whether to include prereleases, so we don't need that here.
@@ -110,11 +116,11 @@ def find_best_compatible_version(
             # Referencing the dragon above, if we had a current version and it was
             # unsuitable, then we still output a generic message.  Note that > does not
             # set the prerelease bit, but >= does.
-            raise ValueError(
+            raise NoMatchingRelease(
                 f"{project.name} has no release with constraint {req.specifier}"
             )
         else:
-            raise ValueError(
+            raise NoMatchingRelease(
                 f"{project.name} has no {python_version}-compatible release with constraint {req.specifier}"
             )
 
