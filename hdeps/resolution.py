@@ -92,12 +92,13 @@ class Walker:
         self.queue.append((self.root, name, req, source, empty_set))
 
     @ktrace("project_name", "proactive", shortname=True)
-    def _fetch_project(self, project_name: CanonicalName, proactive: bool) -> Project:
+    def _fetch_project(
+        self, project_name: CanonicalName, proactive: bool
+    ) -> Optional[Project]:
         try:
             project_page = self.pypi_simple.get_project_page(project_name)
         except NoSuchProjectError:
-            LOG.error("Missing project %s", project_name)
-            return Project(project_name, {})
+            return None
         project = Project.from_pypi_simple_project_page(project_page)
         # It's extremely likely that we will subsequently look up the deps of
         # the most recent version, so go ahead and schedule the metadata fetch.
@@ -156,6 +157,10 @@ class Walker:
             with kev("project result", project_name=name):
                 project = fut.result()
 
+            if project is None:
+                LOG.error("Missing dep processing %s", req, name)
+                continue
+
             cur = chosen.get(name)
             with kev("find_best_compatible_version", project_name=name, req=str(req)):
                 try:
@@ -167,7 +172,7 @@ class Walker:
                         self.current_version_callback,
                     )
                 except NoMatchingRelease:
-                    LOG.info("Missing dep %s processing %s", req, name)
+                    LOG.error("No matching version for %s processing %s", req, name)
                     continue
             choice = Choice(name, version)
 
