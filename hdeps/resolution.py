@@ -58,7 +58,7 @@ class Walker:
         self.extracted_metadata_cache = extracted_metadata_cache or SimpleCache()
         self.color = color
 
-        self.memo_fetch: Dict[CanonicalName, Future[Project]] = {}
+        self.memo_fetch: Dict[CanonicalName, Future[Optional[Project]]] = {}
         self.memo_fetch_lock = threading.Lock()
         self.memo_version_metadata: Dict[ProjectVersion, Future[BasicMetadata]] = {}
 
