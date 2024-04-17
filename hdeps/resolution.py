@@ -158,7 +158,7 @@ class Walker:
                 project = fut.result()
 
             if project is None:
-                LOG.error("Missing dep processing %s", req, name)
+                LOG.error("Missing dep processing %s", name)
                 continue
 
             cur = chosen.get(name)

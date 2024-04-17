@@ -38,6 +38,11 @@ class FakeSession:
         else:
             raise ValueError(f"Unhandled path {url}")
 
+        if not local_path.exists():
+            resp = Response()
+            resp.status_code = 404
+            return resp
+
         data = local_path.read_bytes()
         if text:
             data = data.replace(b"\r\n", b"\n")

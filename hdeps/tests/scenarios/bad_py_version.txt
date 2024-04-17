@@ -1,0 +1,4 @@
+$ hdeps --python-version 3.7 pyver==3.6
+ERROR    hdeps.resolution:<n> No matching version for pyver==3.6 processing pyver
+========== Summary ==========
+No conflicts found.

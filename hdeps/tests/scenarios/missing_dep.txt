@@ -1,0 +1,4 @@
+$ hdeps foo
+ERROR    hdeps.resolution:<n> Missing dep processing foo
+========== Summary ==========
+No conflicts found.
