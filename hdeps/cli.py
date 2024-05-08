@@ -198,7 +198,7 @@ def main(
                 f"Found conflict: {project} {sorted([str(x) for x in versions])}"
             )
             for version in versions:
-                with keke.kev("pin_attempt", project=project, version=version):
+                with keke.kev("pin_attempt", project=project, version=str(version)):
                     LOG.info("Trying to pin %s==%s", project, version)
                     req = Requirement(f"{project}=={version}")
                     walker.clear()
