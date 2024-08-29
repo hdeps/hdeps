@@ -16,6 +16,7 @@ from pypi_simple import ACCEPT_JSON_PREFERRED, PyPISimple
 from vmodule import vmodule_init
 
 from .cache import NoCache, SimpleCache
+from .checkout import read_checkout_reqs
 from .markers import EnvironmentMarkers
 from .resolution import Walker
 from .session import get_cached_retry_session, get_retry_session
@@ -176,7 +177,11 @@ def main(
 
     def solve() -> None:
         for dep in deps:
-            walker.feed(Requirement(dep))
+            if dep.startswith(".") or "/" in dep:
+                source, checkout_deps = read_checkout_reqs(Path(dep))
+                walker.feed_from(checkout_deps, source)
+            else:
+                walker.feed(Requirement(dep))
         for req in requirements_file:
             walker.feed_file(Path(req))
         walker.drain()

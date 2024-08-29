@@ -4,7 +4,7 @@ from collections import defaultdict, deque
 from concurrent.futures import Future, ThreadPoolExecutor
 
 from pathlib import Path
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, Optional, Set, Tuple
 
 import click
 
@@ -73,8 +73,11 @@ class Walker:
         self.known_conflicts.clear()
 
     def feed_file(self, req_file: Path) -> None:
-        for req in _iter_simple_requirements(req_file):
-            self.feed(req, str(req_file))
+        self.feed_from(_iter_simple_requirements(req_file), str(req_file))
+
+    def feed_from(self, reqs: Iterable[Requirement], source: str = "arg") -> None:
+        for req in reqs:
+            self.feed(req, source)
 
     def feed(self, req: Requirement, source: str = "arg") -> None:
         name = CanonicalName(canonicalize_name(req.name))
