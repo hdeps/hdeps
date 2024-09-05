@@ -162,6 +162,7 @@ class ProjectVersion:
                     # These two lines come from warehouse itself
                     name, version, _ = best_pkg.filename.split("-", 2)
                     md_bytes = metadata_please.from_wheel(zf, name)
+                    assert md_bytes is not None
                     extracted_metadata_cache.set(best_pkg.url, md_bytes)
                 md = md_bytes.decode("utf-8")
         elif best_pkg.package_type == "sdist":
