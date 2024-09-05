@@ -8,12 +8,15 @@ This code was originally part of [honesty](https://pypi.org/project/honesty/)
 but is easier to iterate on with pypi-simple as its source.
 
 ```sh
+# For looking up published projects
 $ hdeps requests
-...
 $ hdeps --install-order requests
-...
 $ hdeps --have urllib3==1.999 requests
-...
+
+# For looking up local (potentially modified) projects
+$ hdeps .
+$ hdeps /path/to/checkout
+$ hdeps -r /path/to/requirements.{txt,in}
 ```
 
 # Why isn't it a solver?
