@@ -206,8 +206,9 @@ class ProjectVersion:
                             reqs.append(Requirement(dep))
                         except InvalidRequirement:
                             LOG.warning(
-                                "Skipping invalid requirement %r",
+                                "Skipping invalid requirement %r from %r",
                                 dep,
+                                best_pkg.filename,
                             )
 
                 if t := msg.get_all("Provides-Extra"):
