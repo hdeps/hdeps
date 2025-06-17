@@ -28,6 +28,7 @@ from seekablehttpfile import SeekableHttpFile
 from seekablehttpfile.core import get_range_requests
 
 from .cache import SimpleCache
+from .session import bearer
 from .types import CanonicalName
 
 LOG = logging.getLogger(__name__)
@@ -260,7 +261,7 @@ if __name__ == "__main__":  # pragma: no cover
     from .session import get_retry_session
 
     s = get_retry_session()
-    x = PyPISimple(get_index_url(), session=s)
+    x = PyPISimple(get_index_url(), session=s, auth=bearer)
     p = Project.from_pypi_simple_project_page(
         x.get_project_page(CanonicalName(sys.argv[1]))
     )

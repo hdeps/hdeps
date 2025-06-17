@@ -1,3 +1,4 @@
+import subprocess
 from typing import Optional
 
 import appdirs
@@ -5,6 +6,13 @@ from cachecontrol import CacheControlAdapter
 from cachecontrol.caches import SeparateBodyFileCache
 from requests.adapters import HTTPAdapter, Retry
 from requests.sessions import Session
+from requests_oauth2client import BearerToken
+
+
+bearer = BearerToken(
+    subprocess.check_output(["uv", "auth", "token"], encoding="utf-8").strip(),
+    expires_in=60,
+)
 
 
 def get_cached_retry_session(cache_dir: Optional[str] = None) -> Session:
@@ -22,6 +30,7 @@ def get_cached_retry_session(cache_dir: Optional[str] = None) -> Session:
     )
     sess.mount("https://", cache_adapter)
     sess.mount("http://", cache_adapter)
+    sess.auth = bearer
     return sess
 
 
@@ -34,6 +43,8 @@ def get_retry_session() -> Session:
     adapter = HTTPAdapter(max_retries=retries, pool_maxsize=100)
     sess.mount("https://", adapter)
     sess.mount("http://", adapter)
+
+    sess.auth = bearer
     return sess
 
 
