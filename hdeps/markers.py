@@ -19,6 +19,9 @@ class EnvironmentMarkers:
     implementation_name: str = "cpython"
 
     def __post_init__(self) -> None:
+        if self.python_full_version is None and self.python_version is not None:
+            pv = self.python_version
+            self.python_full_version = pv if pv.count(".") >= 2 else pv + ".0"
         if self.sys_platform == "linux":
             if self.python_version and self.python_version[:1] == "2":
                 self.sys_platform = "linux2"
