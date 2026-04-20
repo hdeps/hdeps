@@ -231,6 +231,34 @@ class Walker:
                     else:
                         LOG.log(VLOG_2, "    omit")
 
+    def collect_paths_to(self, target: CanonicalName) -> Set[ChoiceKeyType]:
+        """Return the set of choice keys that lie on any path from roots to target."""
+        marked: Set[ChoiceKeyType] = set()
+        seen: Set[ChoiceKeyType] = set()
+        self._mark_paths_to_recursive(target, self.root, seen, marked)
+        return marked
+
+    def _mark_paths_to_recursive(
+        self,
+        target: CanonicalName,
+        choice: Choice,
+        seen: Set[ChoiceKeyType],
+        marked: Set[ChoiceKeyType],
+    ) -> bool:
+        found = choice.project == target
+        for x in choice.deps:
+            key = x.target.key()
+            if key in seen:
+                if key in marked:
+                    found = True
+            else:
+                seen.add(key)
+                if self._mark_paths_to_recursive(target, x.target, seen, marked):
+                    found = True
+        if found and choice is not self.root:
+            marked.add(choice.key())
+        return found
+
     def print_flat(
         self,
         choice: Optional[Choice] = None,
@@ -296,6 +324,7 @@ class Walker:
         ] = None,
         known_conflicts: Dict[CanonicalName, Set[Version]] = defaultdict(set),
         depth: int = 0,
+        paths_to: Optional[Set[ChoiceKeyType]] = None,
     ) -> None:
         prefix = ". " * depth
         if choice is None:
@@ -306,6 +335,8 @@ class Walker:
         assert seen is not None
         # Inorder, but avoid doing duplicate work...
         for x in choice.deps:
+            if paths_to is not None and x.target.key() not in paths_to:
+                continue
             # TODO display whether install or build dep, and whether pin disallows
             # current version, has compatible bdist, no sdist, etc
             key = (x.target.project, x.target.version, x.target.extras)
@@ -355,4 +386,4 @@ class Walker:
                     ),
                 )
                 if x.target.deps:
-                    self.print_tree(x.target, seen, known_conflicts, depth + 1)
+                    self.print_tree(x.target, seen, known_conflicts, depth + 1, paths_to)
