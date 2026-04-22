@@ -10,7 +10,7 @@ on:
   pull_request:
 
 jobs:
-  hdeps-3.13-compat:
+  hdeps-single-version-test:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -59,7 +59,7 @@ jobs:
         run: hdeps hdeps
 
   hdeps:
-    needs: hdeps-3.13-compat
+    needs: hdeps-single-version-test
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
