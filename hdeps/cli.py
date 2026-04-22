@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import threading
 import time
 from pathlib import Path
@@ -95,6 +96,12 @@ def _stats_thread() -> None:
     help="Output a theoretical install order instead of a tree",
 )
 @click.option(
+    "--paths-to",
+    metavar="NAME",
+    multiple=True,
+    help="Only print dependency paths leading to the named project (repeatable)",
+)
+@click.option(
     "--print-legend",
     is_flag=True,
     help="Output the meaning of colors in a header",
@@ -128,6 +135,7 @@ def main(
     no_cache: bool,
     print_legend: bool,
     color: Optional[bool],
+    paths_to: List[str],
 ) -> None:
     if trace:
         ctx.with_resource(keke.TraceOutput(trace))
@@ -193,7 +201,32 @@ def main(
     else:
         if print_legend:
             walker.print_legend()
-        walker.print_tree()
+        if paths_to:
+            cleaned_paths_to = []
+            for n in paths_to:
+                if not re.fullmatch(r"[a-zA-Z0-9_-]+", n):
+                    m = re.match(r"[a-zA-Z0-9_-]+", n)
+                    if not m:
+                        click.echo(
+                            click.style("warning", fg="yellow", bold=True)
+                            + f": --paths-to={n!r} does not start with a valid project name, skipping",
+                            err=True,
+                        )
+                        continue
+                    name_only = m.group()
+                    click.echo(
+                        click.style("warning", fg="yellow", bold=True)
+                        + f": --paths-to={n!r} looks like more than a project name; using {name_only!r}",
+                        err=True,
+                    )
+                    n = name_only
+                cleaned_paths_to.append(n)
+            marked = set().union(
+                *(walker.collect_paths_to(CanonicalName(canonicalize_name(n))) for n in cleaned_paths_to)
+            )
+            walker.print_tree(paths_to=marked)
+        else:
+            walker.print_tree()
 
     click.echo("========== Summary ==========")
     if walker.known_conflicts:

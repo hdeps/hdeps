@@ -1,0 +1,6 @@
+# paths-to filters to only nodes on the path; robin is omitted since it is
+# beyond the target
+$ hdeps --paths-to=batman batman==1
+batman (==1.0) via ==1
+========== Summary ==========
+No conflicts found.
