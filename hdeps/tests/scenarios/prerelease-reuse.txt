@@ -1,0 +1,7 @@
+$ hdeps batman>=2.5 joker
+batman (==3.0.dev0) via >=2.5
+. robin (==2.0) via >1.0
+joker (==1.0) via *
+. batman (==3.0.dev0) (already listed) via >=2.5
+========== Summary ==========
+No conflicts found.

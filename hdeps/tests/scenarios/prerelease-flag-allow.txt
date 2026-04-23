@@ -1,0 +1,6 @@
+$ hdeps --prerelease=allow joker
+joker (==1.0) via *
+. batman (==3.0.dev0) via >=2.5
+. . robin (==2.0) via >1.0
+========== Summary ==========
+No conflicts found.

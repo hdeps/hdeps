@@ -49,6 +49,7 @@ def find_best_compatible_version(
     env_markers: EnvironmentMarkers,
     already_chosen: Optional[Version],
     current_version_callback: VersionCallback,
+    allow_pre: Optional[bool] = False,
 ) -> Version:
     # Handle requires_python first, so we can produce a better error message
     # when there are no version-compatible candidates (before we even get to
@@ -61,13 +62,29 @@ def find_best_compatible_version(
         requires_python_match, project, {}, python_version
     )
 
+    # Determine what to pass as `prereleases` to packaging's filter():
+    #   True  → always include pre-releases
+    #   None  → packaging's if-necessary-or-explicit fallback (used for root deps)
+    #   False → only if the specifier explicitly names a pre-release; no fallback
+    #
+    # An already-chosen pre-release always takes priority so it can be reused.
+    pre: Optional[bool]
+    if already_chosen is not None and already_chosen.is_prerelease:
+        pre = True
+    elif allow_pre is True:
+        pre = True
+    elif allow_pre is None:
+        pre = None
+    else:
+        pre = bool(req.specifier.prereleases) or False
+
     possible: List[Version] = []
 
     specifier_matched = False
     with kev("reverse"):
         rev = reversed(project.versions.keys())
     with kev("initial filter"):
-        for version in req.specifier.filter(rev):
+        for version in req.specifier.filter(rev, prereleases=pre):
             specifier_matched = True
             if _requires_python_match(version):
                 # Only keep the first one
@@ -110,9 +127,9 @@ def find_best_compatible_version(
     LOG.log(VLOG_1, "possible for %s: %s", req, possible)
     with kev("filter by specifier"):
         # This should only ever be ~3 items now!
-        possible = list(req.specifier.filter(possible))
+        possible = list(req.specifier.filter(possible, prereleases=pre))
     if not possible:
-        if not list(req.specifier.filter(project.versions.keys())):
+        if not list(req.specifier.filter(project.versions.keys(), prereleases=pre)):
             # Referencing the dragon above, if we had a current version and it was
             # unsuitable, then we still output a generic message.  Note that > does not
             # set the prerelease bit, but >= does.

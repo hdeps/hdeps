@@ -49,6 +49,7 @@ class Walker:
         current_version_callback: VersionCallback = _all_current_versions_unknown,
         extracted_metadata_cache: Optional[SimpleCache] = None,
         color: Optional[bool] = None,
+        prerelease_mode: str = "if-necessary",
     ):
         self.root = Choice(CanonicalName("-"), Version("0"))
         self.pool = ThreadPoolExecutor(max_workers=parallelism)
@@ -67,6 +68,7 @@ class Walker:
         ] = deque()
         self.current_version_callback = current_version_callback
         self.known_conflicts: Dict[CanonicalName, Set[Version]] = defaultdict(set)
+        self.prerelease_mode = prerelease_mode
 
     def clear(self) -> None:
         self.root = Choice(CanonicalName("-"), Version("0"))
@@ -167,12 +169,19 @@ class Walker:
             cur = chosen.get(name)
             with kev("find_best_compatible_version", project_name=name, req=str(req)):
                 try:
+                    if self.prerelease_mode == "allow":
+                        allow_pre: Optional[bool] = True
+                    elif self.prerelease_mode == "never":
+                        allow_pre = False
+                    else:  # if-necessary
+                        allow_pre = None if source != "dep" else False
                     version = find_best_compatible_version(
                         project,
                         req,
                         self.env_markers,
                         cur,
                         self.current_version_callback,
+                        allow_pre=allow_pre,
                     )
                 except NoMatchingRelease:
                     LOG.error("No matching version for %s processing %s", req, name)

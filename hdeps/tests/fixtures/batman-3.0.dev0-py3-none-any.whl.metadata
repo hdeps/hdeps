@@ -1,0 +1,2 @@
+Name: batman
+Requires-Dist: robin>1.0
