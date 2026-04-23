@@ -105,6 +105,13 @@ def _stats_thread() -> None:
     default=None,
     help="Default is to guess from NO_COLOR or FORCE_COLOR env vars being non-empty",
 )
+@click.option(
+    "--prerelease",
+    type=click.Choice(["allow", "if-necessary", "never"]),
+    default="if-necessary",
+    show_default=True,
+    help="Pre-release version selection strategy.",
+)
 @click.option("--have", help="pkg==ver to assume already installed", multiple=True)
 @click.option("-r", "--requirements-file", multiple=True)
 @click.argument(
@@ -128,6 +135,7 @@ def main(
     no_cache: bool,
     print_legend: bool,
     color: Optional[bool],
+    prerelease: str,
 ) -> None:
     if trace:
         ctx.with_resource(keke.TraceOutput(trace))
@@ -173,6 +181,7 @@ def main(
         current_version_callback=have_versions.get,
         extracted_metadata_cache=extracted_metadata_cache,
         color=ctx.color,
+        prerelease_mode=prerelease,
     )
 
     def solve() -> None:

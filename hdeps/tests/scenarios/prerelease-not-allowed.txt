@@ -1,5 +1,5 @@
-$ hdeps batman>=2.1dev0
-batman (==3.0.dev0) via >=2.1dev0
+$ hdeps batman>=2.5
+batman (==3.0.dev0) via >=2.5
 . robin (==2.0) via >1.0
 ========== Summary ==========
 No conflicts found.

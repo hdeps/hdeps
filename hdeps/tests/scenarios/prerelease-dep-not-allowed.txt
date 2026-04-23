@@ -1,0 +1,5 @@
+$ hdeps joker
+ERROR    hdeps.resolution:<n> No matching version for batman>=2.5 processing batman
+joker (==1.0) via *
+========== Summary ==========
+No conflicts found.
